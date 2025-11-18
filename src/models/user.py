@@ -15,10 +15,6 @@ class PyObjectId(ObjectId):
             raise ValueError("Invalid ObjectId")
         return ObjectId(v)
 
-    @classmethod
-    def __modify_schema__(cls, field_schema):
-        field_schema.update(type="string")
-
 
 # Modelo principal del Usuario
 class User(BaseModel):
@@ -37,15 +33,15 @@ class User(BaseModel):
     is_active: bool = True
 
     # Timestamps automáticos
-    created_at: datetime = Field(default_factory=datetime.now(timezone.utc))  # type: ignore
-    updated_at: datetime = Field(default_factory=datetime.now(timezone.utc))  # type: ignore
+    created_at: datetime = Field(default=datetime.now(timezone.utc))  # type: ignore
+    updated_at: datetime = Field(default=datetime.now(timezone.utc))  # type: ignore
 
     # Configuración de Pydantic para este modelo
     class Config:
-        allow_population_by_field_name = True  # Permite usar alias o nombre real
+        validate_by_name = True  # Permite usar alias o nombre real
         arbitrary_types_allowed = True  # Permite tipos personalizados como PyObjectId
         json_encoders = {ObjectId: str}  # Convierte ObjectId a string en JSON
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "username": "johndoe",
                 "email": "john@example.com",
