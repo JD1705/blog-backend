@@ -1,5 +1,5 @@
 from services.auth_services import AuthService
-from schemas.user import UserCreate, UserResponse
+from schemas.user import UserCreate, UserResponse, UserLogin
 from fastapi import APIRouter, status, Depends
 
 router = APIRouter(prefix="/auth")
@@ -16,5 +16,11 @@ async def register(user_data: UserCreate, auth_service: AuthService = Depends())
             created_at=user.created_at,
             role=user.role
             )
+
+    return response
+
+@router.post("/login")
+async def login(user_data: UserLogin, auth_service: AuthService = Depends()):
+    response = await auth_service.login_user(user_data)
 
     return response
