@@ -24,7 +24,7 @@ class AuthService:
         else:
             new_user = User(
                 username=user_data.username,
-                hashed_password=str(hashed_pwd),
+                hashed_password=hashed_pwd,
                 email=normalized_email,
                 bio=user_data.bio,
             )
