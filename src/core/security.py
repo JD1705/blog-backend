@@ -1,8 +1,8 @@
 import bcrypt
-from pydantic import EncodedBytes, SecretStr
+from pydantic import SecretStr
 from jwt import encode, decode, ExpiredSignatureError, InvalidTokenError
 from datetime import timedelta, timezone, datetime
-from config import settings
+from core.config import settings
 from fastapi import status, HTTPException
 
 
@@ -11,13 +11,13 @@ def hash_password(plain_pwd: SecretStr):
     pwd = plain_pwd.get_secret_value().encode()
 
     hashed_pwd = bcrypt.hashpw(pwd, salt)
-    return hashed_pwd
+    return hashed_pwd.decode()
 
 
-def verify_password(plain_pwd: SecretStr, hashed_pwd: bytes):
+def verify_password(plain_pwd: SecretStr, hashed_pwd: str):
     pwd = plain_pwd.get_secret_value().encode()
 
-    verified = bcrypt.checkpw(pwd, hashed_pwd)
+    verified = bcrypt.checkpw(pwd, hashed_pwd.encode())
     return verified
 
 
