@@ -3,6 +3,8 @@ from models.user import User
 from schemas.user import UserCreate, UserLogin
 from core.security import create_jwt_token, hash_password, verify_password
 from fastapi import HTTPException, status
+from datetime import datetime, timezone, timedelta
+from models.token import TokenBlacklist
 
 
 class AuthService:
@@ -53,3 +55,24 @@ class AuthService:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Incorrect Credentials",
                 )
+
+    async def logout_user(self, token: str, expires_time: int = 24) -> bool:
+        collection = self.database.database.get_collection("token_blacklist") # type: ignore
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_time)
+
+        blacklisted_token = TokenBlacklist(
+                token=token,
+                expires_at=expires_at
+                )
+
+        await collection.insert_one(blacklisted_token.to_mongo_dict())
+        return True
+
+    async def is_blacklisted_token(self, token: str) -> bool:
+        collection = self.database.database.get_collection("token_blacklist") # type: ignore
+
+        result = await collection.find_one({"token":token})
+        if result is not None:
+            return True
+        else:
+            return False
