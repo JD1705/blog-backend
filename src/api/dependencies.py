@@ -3,8 +3,10 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from core.security import verify_token
 from core.database import db
 from bson import ObjectId
+from services.auth_services import AuthService
 
 security = HTTPBearer()
+auth_service = AuthService()
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
@@ -25,6 +27,13 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="User Not Found"
+                    )
+
+        is_token_blakclisted = auth_service.is_blacklisted_token(token)
+        if is_token_blakclisted == True:
+            raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="You are not authenticated"
                     )
 
         return user
