@@ -22,14 +22,14 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                     )
         
         collection = db.database.get_collection("users") # type: ignore
-        user = collection.find_one({"_id":ObjectId(user_id)})
+        user = await collection.find_one({"_id":ObjectId(user_id)})
         if not user:
             raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="User Not Found"
                     )
 
-        is_token_blakclisted = auth_service.is_blacklisted_token(token)
+        is_token_blakclisted = await auth_service.is_blacklisted_token(token)
         if is_token_blakclisted == True:
             raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
