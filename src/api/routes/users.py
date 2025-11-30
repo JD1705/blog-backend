@@ -10,3 +10,9 @@ async def get_profile(current_user: dict = Depends(get_current_user), user_servi
     response = await user_service.get_user_profile(current_user)
 
     return response
+
+@router.put("/me", response_model=UserResponse)
+async def update_profile(update_data: UserUpdate, current_user: dict = Depends(get_current_user), user_service: UserService = Depends()):
+    response = await user_service.update_user_profile(current_user, update_data)
+
+    return response
