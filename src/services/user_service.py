@@ -54,6 +54,10 @@ class UserService:
                     post_count=updated_user["posts_count"],  # type: ignore
                     created_at=updated_user["created_at"],  # type: ignore
                 )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT, detail="Incorrect Credentials"
+                )
 
         else:
             for field in fields:
