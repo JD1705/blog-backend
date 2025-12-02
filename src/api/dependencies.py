@@ -28,6 +28,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="User Not Found"
                     )
+        
+        elif not user["is_active"] == True:
+            raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is deactivated"
+                    )
 
         is_token_blakclisted = await auth_service.is_blacklisted_token(token)
         if is_token_blakclisted == True:
