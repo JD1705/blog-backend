@@ -16,3 +16,7 @@ async def update_profile(update_data: UserUpdate, current_user: dict = Depends(g
     response = await user_service.update_user_profile(current_user, update_data)
 
     return response
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def deactivate_user(current_user: dict = Depends(get_current_user), user_service: UserService = Depends()):
+    await user_service.deactivate_user(current_user)
