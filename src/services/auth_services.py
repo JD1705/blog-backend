@@ -43,6 +43,12 @@ class AuthService:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect Credentials"
             )
+        
+        elif not exist_user["is_active"] == True:
+            raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is deactivated"
+                    )
+
         else:
             verify = verify_password(user_data.password, exist_user["hashed_password"])
             if verify:
