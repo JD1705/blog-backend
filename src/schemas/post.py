@@ -65,16 +65,6 @@ class PostListResponse(BaseModel):
     published_at: Optional[datetime]
     status: PostStatus
     
-    @field_validator('excerpt', mode="before")
-    def generate_excerpt(cls, v, values):
-        if v is None and 'content' in values:
-            content = values['content']
-            # Remove basic markdown for excerpt
-            import re
-            clean_content = re.sub(r'[#*`_\-]', '', content)
-            return clean_content[:150] + '...' if len(clean_content) > 150 else clean_content
-        return v
-
 class PostFilters(BaseModel):
     status: Optional[PostStatus] = PostStatus.PUBLISHED
     author_username: Optional[str] = None
