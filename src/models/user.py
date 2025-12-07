@@ -2,22 +2,10 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from pydantic import BaseModel, Field
 from typing import Optional
-
-
-class PyObjectId(ObjectId):
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, v):
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid ObjectId")
-        return ObjectId(v)
-
+from base import PyObjectId, MongoModel
 
 # Modelo principal del Usuario
-class User(BaseModel):
+class User(MongoModel):
     # Campo ID - usa nuestro ObjectId personalizado
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
 
@@ -33,23 +21,8 @@ class User(BaseModel):
     is_active: bool = True
 
     # Timestamps automáticos
-    created_at: datetime = Field(default=datetime.now(timezone.utc))  # type: ignore
-    updated_at: datetime = Field(default=datetime.now(timezone.utc))  # type: ignore
-
-    # Configuración de Pydantic para este modelo
-    class Config:
-        validate_by_name = True  # Permite usar alias o nombre real
-        arbitrary_types_allowed = True  # Permite tipos personalizados como PyObjectId
-        json_encoders = {ObjectId: str}  # Convierte ObjectId a string en JSON
-        json_schema_extra = {
-            "example": {
-                "username": "johndoe",
-                "email": "john@example.com",
-                "bio": "A passionate blogger",
-                "role": "author",
-                "posts_count": 5,
-            }
-        }
+    created_at: datetime = Field(default_factory=datetime.now(timezone.utc))  # type: ignore
+    updated_at: datetime = Field(default_factory=datetime.now(timezone.utc))  # type: ignore
 
     # Método para actualizar el timestamp cuando se modifica el usuario
     def update_timestamp(self):
