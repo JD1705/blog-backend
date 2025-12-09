@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from pydantic import BaseModel, Field
 from typing import Optional
-from base import PyObjectId, MongoModel
+from .base import PyObjectId, MongoModel
 
 # Modelo principal del Usuario
 class User(MongoModel):
@@ -21,8 +21,8 @@ class User(MongoModel):
     is_active: bool = True
 
     # Timestamps automáticos
-    created_at: datetime = Field(default_factory=datetime.now(timezone.utc))  # type: ignore
-    updated_at: datetime = Field(default_factory=datetime.now(timezone.utc))  # type: ignore
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Método para actualizar el timestamp cuando se modifica el usuario
     def update_timestamp(self):
