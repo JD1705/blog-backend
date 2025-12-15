@@ -54,7 +54,7 @@ class User(MongoModel):
     @classmethod
     def from_mongo_dict(cls, data: dict) -> "User":
         """Crea una instancia User desde un documento de MongoDB"""
-        if "_id" in data:
-            data["id"] = str(data["_id"])
+        if "_id" in data.keys():
+            data["_id"] = str(data["_id"])
         return cls(**data)
 
