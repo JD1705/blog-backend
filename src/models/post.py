@@ -14,7 +14,7 @@ class Post(MongoModel):
     featured_image: Optional[str] = None
 
     author_id: PyObjectId = Field(...)
-    author_username: str = Field(..., min_length=3, max_length=50)
+    author_username: str = Field(..., max_length=50)
 
     status: str = Field(default="draft")
     view_count: int = Field(default=0, ge=0)  # ge=0 -> "greater or equal"
