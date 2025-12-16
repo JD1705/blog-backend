@@ -44,3 +44,56 @@ class PostService:
         )
 
         return created_post
+
+    async def get_post_by_slug(
+        self, slug: str, current_user: Optional[dict] = None
+    ) -> Optional[Post]:
+        collection = self.database.get_collection("posts")
+
+        response = await collection.find_one({"slug": slug})
+        if not response:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Post Not Found"
+            )
+
+        if response["status"] != "published" and current_user is not None:  # type: ignore
+            if current_user["role"] in ["admin", "author"]:
+                post = Post(
+                    title=response["title"],
+                    content=response["content"],
+                    author_id=str(response["author_id"]),
+                    tags=response["tags"],
+                    featured_image=response["featured_image"],
+                    _id=str(response["_id"]),
+                    slug=response["slug"],
+                    author_username=response["author_username"],
+                    status=response["status"],
+                    view_count=response["view_count"],
+                    comments_count=response["comments_count"],
+                    created_at=response["created_at"],
+                    updated_at=response["updated_at"],
+                    published_at=response["published_at"],
+                )
+                return post
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Post Not Found"
+                )
+
+        post = Post(
+            title=response["title"],
+            content=response["content"],
+            author_id=str(response["author_id"]),
+            tags=response["tags"],
+            featured_image=response["featured_image"],
+            _id=str(response["_id"]),
+            slug=response["slug"],
+            author_username=response["author_username"],
+            status=response["status"],
+            view_count=response["view_count"],
+            comments_count=response["comments_count"],
+            created_at=response["created_at"],
+            updated_at=response["updated_at"],
+            published_at=response["published_at"],
+        )
+        return post
