@@ -1,15 +1,17 @@
 from fastapi import FastAPI
-from core.database import db
+from core.database import db, create_all_indexes
 from contextlib import asynccontextmanager
 from unidecode import unidecode
 import re
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect()
-    await db.setup_database_indexes()
+    await create_all_indexes(db.database)
     yield
     await db.close()
+
 
 def generate_slug(text: str) -> str:
     """
@@ -18,12 +20,12 @@ def generate_slug(text: str) -> str:
     """
     # transform to ascii (handle accents)
     text = unidecode(text)
-    
+
     # make it lowercase
     text = text.lower()
 
     # replace alphanumeric characters for "-"
-    text = re.sub(r"[^a-z0-9\s-]", '', text)
+    text = re.sub(r"[^a-z0-9\s-]", "", text)
 
     # replace multiple blank spaces with "-"
     text = re.sub(r"[\s-]+", "-", text)
