@@ -1,13 +1,16 @@
-from datetime import datetime, timedelta
-from pydantic import BaseModel, Field
+from datetime import datetime
+from pydantic import Field
 from bson import ObjectId
-from models.user import PyObjectId
+from models.base import PyObjectId, MongoModel
+from pymongo import ASCENDING, IndexModel
+from typing import List
 
-class TokenBlacklist(BaseModel):
+
+class TokenBlacklist(MongoModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     token: str
     expires_at: datetime
-    
+
     class Config:
         validate_by_name = True
         arbitrary_types_allowed = True
@@ -28,3 +31,21 @@ class TokenBlacklist(BaseModel):
             data["id"] = str(data["_id"])
         return cls(**data)
 
+    @classmethod
+    def get_indexes(cls) -> List[IndexModel]:
+        return [
+            # Índice TTL para expiración automática
+            IndexModel(
+                [("expires_at", ASCENDING)], expireAfterSeconds=0, name="ttl_expires"
+            ),
+            # Índice para búsqueda rápida por token
+            IndexModel([("token", ASCENDING)], name="idx_token"),
+            # Índice para usuario + token
+            IndexModel(
+                [("user_id", ASCENDING), ("token", ASCENDING)], name="idx_user_token"
+            ),
+        ]
+
+    @classmethod
+    def get_collection_name(cls) -> str:
+        return "token_blacklist"

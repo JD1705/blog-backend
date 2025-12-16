@@ -1,7 +1,9 @@
-from pydantic import BaseModel, GetJsonSchemaHandler
+from typing import Any, List
+
 from bson import ObjectId
-from typing import Any
+from pydantic import BaseModel, GetJsonSchemaHandler
 from pydantic_core import CoreSchema, core_schema
+from pymongo import IndexModel
 
 
 class PyObjectId(ObjectId):
@@ -48,6 +50,23 @@ class PyObjectId(ObjectId):
 
 
 class MongoModel(BaseModel):
+    @classmethod
+    def get_indexes(cls) -> List[IndexModel]:
+        """
+        Retorna lista de índices para esta colección.
+        Sobreescribir en cada modelo hijo.
+        """
+        return []
+
+    @classmethod
+    def get_collection_name(cls) -> str:
+        """
+        Retorna el nombre de la colección basado en el nombre de la clase.
+        User -> "users", Post -> "posts", etc.
+        """
+        # Convierte "User" a "users", "Post" to "posts"
+        return cls.__name__.lower() + "s"
+
     class Config:
         validate_by_field_name = True
         arbitrary_types_allowed = True

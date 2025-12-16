@@ -1,8 +1,11 @@
 from datetime import datetime, timezone
-from bson import ObjectId
-from pydantic import BaseModel, Field
-from typing import Optional
-from .base import PyObjectId, MongoModel
+from typing import List, Optional
+
+from pydantic import Field
+from pymongo import ASCENDING, IndexModel
+
+from .base import MongoModel, PyObjectId
+
 
 # Modelo principal del Usuario
 class User(MongoModel):
@@ -58,3 +61,22 @@ class User(MongoModel):
             data["_id"] = str(data["_id"])
         return cls(**data)
 
+    @classmethod
+    def get_indexes(cls) -> List[IndexModel]:
+        """Índices específicos para la colección de usuarios"""
+        return [
+            # Índice único para email
+            IndexModel([("email", ASCENDING)], unique=True, name="unique_email"),
+            # Índice para búsquedas por rol
+            IndexModel([("role", ASCENDING)], name="idx_role"),
+            # Índice compuesto para búsquedas comunes
+            IndexModel(
+                [("is_active", ASCENDING), ("created_at", ASCENDING)],
+                name="idx_active_created",
+            ),
+        ]
+
+    @classmethod
+    def get_collection_name(cls) -> str:
+        """Sobreescribir si necesitas nombre diferente"""
+        return "users"
