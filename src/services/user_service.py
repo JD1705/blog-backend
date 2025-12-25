@@ -81,5 +81,7 @@ class UserService:
             )
 
     async def deactivate_user(self, current_user: dict):
-        collection = self.database.get_collection("users") # type: ignore
-        await collection.update_one({"_id":current_user["_id"]}, {"$set": {"is_active":False}})
+        collection = self.database.get_collection("users")  # type: ignore
+        await collection.update_one(
+            {"_id": current_user["_id"]}, {"$set": {"is_active": False}}
+        )
