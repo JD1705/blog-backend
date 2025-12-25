@@ -9,16 +9,18 @@ from core.database import db
 from models.post import Post
 from models.user import User
 from schemas.post import PostCreate, PostFilters, PostUpdate
-from services.utility import generate_slug
+from services.utility import generate_slug, verify_unique_slug
 
 
 class PostService:
     def __init__(self):
         self.database = db.database
+        self.posts = self.database.posts
+        self.users = self.database.users
 
     async def create_post(self, post_data: PostCreate, author: User) -> Post:
-        post_collection = self.database.get_collection("posts")
-        user_collection = self.database.get_collection("users")
+        post_collection = self.posts
+        user_collection = self.users
 
         if not author.can_create_posts():
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="")
@@ -48,7 +50,7 @@ class PostService:
     async def get_post_by_slug(
         self, slug: str, current_user: Optional[dict] = None
     ) -> Optional[Post]:
-        collection = self.database.get_collection("posts")
+        collection = self.posts
 
         response = await collection.find_one({"slug": slug})
         if not response:
@@ -97,3 +99,61 @@ class PostService:
             published_at=response["published_at"],
         )
         return post
+
+    async def update_post(self, post_slug: str, update_data: PostUpdate, user: User):
+        collection = self.posts
+        data = update_data.model_dump()
+        fields = ["title", "content", "tags", "featured_image", "status"]
+        to_update = {}
+
+        authorize = user.can_create_posts()
+        if not authorize:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="You dont have Permissions",
+            )
+        else:
+            post_exists = await collection.find_one({"slug": post_slug})
+            if post_exists:
+                if user.role == "admin" or (
+                    user.role == "author"
+                    and user.username == post_exists["author_username"]
+                ):
+                    if "title" in data.keys():
+                        new_slug = verify_unique_slug(generate_slug(text=data["title"]))
+
+                        for field in fields:
+                            if data[field] is not None:
+                                to_update.update({field: data[field]})
+
+                        to_update.update(
+                            {"updated_at": datetime.now(timezone.utc), "slug": new_slug}
+                        )
+
+                        await collection.update_one(
+                            {"slug": post_slug}, {"$set": to_update}
+                        )
+                        updated_post = await collection.find_one({"slug": new_slug})
+
+                        return updated_post
+                    else:
+                        for field in fields:
+                            if data[field] is not None:
+                                to_update.update({field: data[field]})
+
+                        to_update.update({"updated_at": datetime.now(timezone.utc)})
+
+                        await collection.update_one(
+                            {"slug": post_slug}, {"$set": to_update}
+                        )
+                        updated_post = await collection.find_one({"slug": post_slug})
+                        return updated_post
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="You dont have Permissions",
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Post Not Found"
+                )
