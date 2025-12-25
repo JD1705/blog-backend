@@ -75,10 +75,16 @@ class Database:
     def __init__(self) -> None:
         self.client = None
         self.database = None
+        self.users = None
+        self.posts = None
+        self.token_blacklist = None
 
     async def connect(self):
         self.client = AsyncMongoClient(settings.mongodb_url)
         self.database = self.client[settings.database_name]
+        self.users = self.database.users
+        self.posts = self.database.posts
+        self.token_blacklist = self.database.token_blacklist
 
         await self.client.aconnect()
         print("\033[32mINFO\033[0m:     Connected to MongoDB")

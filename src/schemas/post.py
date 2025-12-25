@@ -3,10 +3,12 @@ from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Any
 from enum import Enum
 
+
 class PostStatus(str, Enum):
     DRAFT = "draft"
     PUBLISHED = "published"
     ARCHIVED = "archived"
+
 
 class PostBase(BaseModel):
     title: str = Field(..., min_length=5, max_length=200)
@@ -21,8 +23,10 @@ class PostBase(BaseModel):
             normalized_tags.append(i.strip().lower().replace(" ", "-"))
         return normalized_tags
 
+
 class PostCreate(PostBase):
     status: PostStatus = PostStatus.DRAFT
+
 
 class PostUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=5, max_length=200)
@@ -39,18 +43,20 @@ class PostUpdate(BaseModel):
 
         return normalized_tags
 
+
 class PostResponse(PostBase):
-    id: str  
-    slug: str  
-    author_id: str  
-    author_username: str  
+    id: str
+    slug: str
+    author_id: str
+    author_username: str
     status: PostStatus
     view_count: int = 0
     comments_count: int = 0
     created_at: datetime
     updated_at: datetime
     published_at: Optional[datetime] = None
-    
+
+
 class PostListResponse(BaseModel):
     id: str
     title: str
@@ -64,7 +70,8 @@ class PostListResponse(BaseModel):
     created_at: datetime
     published_at: Optional[datetime]
     status: PostStatus
-    
+
+
 class PostFilters(BaseModel):
     status: Optional[PostStatus] = PostStatus.PUBLISHED
     author_username: Optional[str] = None
@@ -73,6 +80,6 @@ class PostFilters(BaseModel):
     min_views: Optional[int] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
-    
+
     class Config:
         extra = "forbid"  # forbid additional fields

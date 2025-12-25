@@ -51,4 +51,3 @@ class UserPublic(BaseModel):
     id: str
     username: str
     role: str
-

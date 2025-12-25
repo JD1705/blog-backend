@@ -14,11 +14,10 @@ def hash_password(plain_pwd: SecretStr):
     return hashed_pwd.decode()
 
 
-def verify_password(plain_pwd: SecretStr, hashed_pwd: str):
+def verify_password(plain_pwd: SecretStr, hashed_pwd: str) -> bool:
     pwd = plain_pwd.get_secret_value().encode()
 
-    verified = bcrypt.checkpw(pwd, hashed_pwd.encode())
-    return verified
+    return bcrypt.checkpw(pwd, hashed_pwd.encode())
 
 
 # JWT
