@@ -60,3 +60,32 @@ async def get_post_by_slug(
         updated_at=response.updated_at,
         published_at=response.published_at,
     )
+
+
+@router.put("/{slug}")
+async def update_post_by_slug(
+    slug: str,
+    update_data: PostUpdate,
+    post_service: PostService = Depends(),
+    current_user: dict = Depends(get_current_user),
+):
+    response = await post_service.update_post(
+        slug, update_data, user=User.from_mongo_dict(current_user)
+    )
+
+    return PostResponse(
+        title=response.title,
+        content=response.content,
+        author_id=str(response.author_id),
+        tags=response.tags,
+        featured_image=response.featured_image,
+        id=str(response.id),
+        slug=response.slug,
+        author_username=response.author_username,
+        status=response.status,
+        view_count=response.view_count,
+        comments_count=response.comments_count,
+        created_at=response.created_at,
+        updated_at=response.updated_at,
+        published_at=response.published_at,
+    )
