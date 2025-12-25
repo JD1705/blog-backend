@@ -34,3 +34,16 @@ def generate_slug(text: str) -> str:
     text = text.strip("-")
 
     return text
+
+
+def verify_unique_slug(slug: str) -> str:
+    if not await db.database.posts.find_one({"slug": slug}):
+        return slug
+    else:
+        counter = 1
+        while True:
+            candidate = f"{slug}-{counter}"
+            if not await db.database.posts.find_one({"slug": candidate}):
+                return candidate
+
+            counter += 1
