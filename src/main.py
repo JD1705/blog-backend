@@ -1,6 +1,4 @@
-from core.config import settings
-from fastapi import FastAPI, status
-from core.database import db
+from fastapi import FastAPI
 from services.utility import lifespan
 from api.routes import auth, users, posts
 
