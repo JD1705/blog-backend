@@ -157,3 +157,45 @@ class PostService:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND, detail="Post Not Found"
                 )
+
+    async def delete_post(self, post_slug: str, user: User) -> bool:
+        posts_collection = self.posts
+        user_collection = self.users
+
+        post_exists = await posts_collection.find_one({"slug": post_slug})
+        if not post_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Post Not Found"
+            )
+
+        else:
+            user_is_reader = user.can_create_posts()
+            if user_is_reader:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="You dont have Permissions",
+                )
+
+            else:
+                if (
+                    user.role == "author"
+                    and post_exists["author_username"] == user.username
+                ) or user.role == "admin":
+                    await user_collection.update_one(
+                        {"username": post_exists["author_username"]},
+                        {
+                            "$set": {
+                                "posts_count": -1,
+                                "updated_at": datetime.now(timezone.utc),
+                            }
+                        },
+                    )
+
+                    deleted_post = await posts_collection.delete_one(
+                        {"slug": post_slug}
+                    )
+
+                    if deleted_post.deleted_count >= 1:
+                        return True
+                    else:
+                        return False
