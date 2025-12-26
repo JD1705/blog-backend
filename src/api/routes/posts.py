@@ -89,3 +89,19 @@ async def update_post_by_slug(
         updated_at=response.updated_at,
         published_at=response.published_at,
     )
+
+
+@router.delete("/{slug}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_post(
+    slug: str,
+    post_service: PostService = Depends(),
+    current_user: dict = Depends(get_current_user),
+):
+    response = await post_service.delete_post(
+        slug, user=User.from_mongo_dict(current_user)
+    )
+
+    if response is False:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Could not Delete Post"
+        )
