@@ -36,7 +36,7 @@ def generate_slug(text: str) -> str:
     return text
 
 
-def verify_unique_slug(slug: str) -> str:
+async def verify_unique_slug(slug: str) -> str:
     if not await db.database.posts.find_one({"slug": slug}):
         return slug
     else:
