@@ -67,10 +67,12 @@ async def update_post_by_slug(
     slug: str,
     update_data: PostUpdate,
     post_service: PostService = Depends(),
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[dict] = Depends(get_current_user),
 ):
     response = await post_service.update_post(
-        slug, update_data, user=User.from_mongo_dict(current_user)
+        slug,
+        update_data,
+        user=User.from_mongo_dict(current_user) if current_user is not None else None,
     )
 
     return PostResponse(
@@ -95,13 +97,43 @@ async def update_post_by_slug(
 async def delete_post(
     slug: str,
     post_service: PostService = Depends(),
-    current_user: dict = Depends(get_current_user),
+    current_user: Optional[dict] = Depends(get_current_user),
 ):
     response = await post_service.delete_post(
-        slug, user=User.from_mongo_dict(current_user)
+        slug,
+        user=User.from_mongo_dict(current_user) if current_user is not None else None,
     )
 
     if response is False:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Could not Delete Post"
         )
+
+
+@router.post("/publish/{slug}")
+async def publish_post(
+    slug: str,
+    post_service: PostService = Depends(),
+    current_user: Optional[dict] = Depends(get_current_user),
+):
+    response = await post_service.publish_post(
+        slug,
+        user=User.from_mongo_dict(current_user) if current_user is not None else None,
+    )
+
+    return PostResponse(
+        title=response.title,
+        content=response.content,
+        author_id=str(response.author_id),
+        tags=response.tags,
+        featured_image=response.featured_image,
+        id=str(response.id),
+        slug=response.slug,
+        author_username=response.author_username,
+        status=response.status,
+        view_count=response.view_count,
+        comments_count=response.comments_count,
+        created_at=response.created_at,
+        updated_at=response.updated_at,
+        published_at=response.published_at,
+    )
