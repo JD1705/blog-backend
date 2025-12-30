@@ -58,8 +58,8 @@ class PostService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Post Not Found"
             )
 
-        if response["status"] != "published" and current_user is not None:  # type: ignore
-            if current_user["role"] in ["admin", "author"]:
+        if response["status"] != "published":  # type: ignore
+            if current_user is not None and current_user["role"] in ["admin", "author"]:
                 post = Post(
                     title=response["title"],
                     content=response["content"],
@@ -81,24 +81,26 @@ class PostService:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND, detail="Post Not Found"
                 )
-
-        post = Post(
-            title=response["title"],
-            content=response["content"],
-            author_id=str(response["author_id"]),
-            tags=response["tags"],
-            featured_image=response["featured_image"],
-            _id=str(response["_id"]),
-            slug=response["slug"],
-            author_username=response["author_username"],
-            status=response["status"],
-            view_count=response["view_count"],
-            comments_count=response["comments_count"],
-            created_at=response["created_at"],
-            updated_at=response["updated_at"],
-            published_at=response["published_at"],
-        )
-        return post
+        else:
+            await collection.update_one({"slug": slug}, {"$inc": {"view_count": +1}})
+            response = await collection.find_one({"slug": slug})
+            post = Post(
+                title=response["title"],
+                content=response["content"],
+                author_id=str(response["author_id"]),
+                tags=response["tags"],
+                featured_image=response["featured_image"],
+                _id=str(response["_id"]),
+                slug=response["slug"],
+                author_username=response["author_username"],
+                status=response["status"],
+                view_count=response["view_count"],
+                comments_count=response["comments_count"],
+                created_at=response["created_at"],
+                updated_at=response["updated_at"],
+                published_at=response["published_at"],
+            )
+            return post
 
     async def update_post(self, post_slug: str, update_data: PostUpdate, user: User):
         collection = self.posts
@@ -119,8 +121,10 @@ class PostService:
                     user.role == "author"
                     and user.username == post_exists["author_username"]
                 ):
-                    if "title" in data.keys():
-                        new_slug = verify_unique_slug(generate_slug(text=data["title"]))
+                    if data["title"] is not None:
+                        new_slug = await verify_unique_slug(
+                            generate_slug(text=data["title"])
+                        )
 
                         for field in fields:
                             if data[field] is not None:
@@ -133,7 +137,9 @@ class PostService:
                         await collection.update_one(
                             {"slug": post_slug}, {"$set": to_update}
                         )
-                        updated_post = await collection.find_one({"slug": new_slug})
+                        updated_post = Post.from_mongo_dict(
+                            await collection.find_one({"slug": new_slug})
+                        )
 
                         return updated_post
                     else:
@@ -146,7 +152,9 @@ class PostService:
                         await collection.update_one(
                             {"slug": post_slug}, {"$set": to_update}
                         )
-                        updated_post = await collection.find_one({"slug": post_slug})
+                        updated_post = Post.from_mongo_dict(
+                            await collection.find_one({"slug": post_slug})
+                        )
                         return updated_post
                 else:
                     raise HTTPException(
@@ -169,33 +177,97 @@ class PostService:
             )
 
         else:
-            user_is_reader = user.can_create_posts()
-            if user_is_reader:
+            if user is None:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+            else:
+                user_is_author = user.can_create_posts()
+                if not user_is_author:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="You dont have Permissions",
+                    )
+
+                else:
+                    if (
+                        user.role == "author"
+                        and post_exists["author_username"] == user.username
+                    ) or user.role == "admin":
+                        await user_collection.update_one(
+                            {"username": post_exists["author_username"]},
+                            {
+                                "$set": {
+                                    "posts_count": -1,
+                                    "updated_at": datetime.now(timezone.utc),
+                                }
+                            },
+                        )
+
+                        deleted_post = await posts_collection.delete_one(
+                            {"slug": post_slug}
+                        )
+
+                        if deleted_post.deleted_count >= 1:
+                            return True
+                        else:
+                            return False
+                    else:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="You dont have Permissions",
+                        )
+
+    async def publish_post(self, slug: str, user: User) -> Post:
+        posts_collection = self.posts
+
+        post_exists = await posts_collection.find_one({"slug": slug})
+        if not post_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Post Not Found"
+            )
+
+        else:
+            if post_exists["status"] == "published":
                 raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="You dont have Permissions",
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Post Already published",
                 )
 
             else:
-                if (
-                    user.role == "author"
-                    and post_exists["author_username"] == user.username
-                ) or user.role == "admin":
-                    await user_collection.update_one(
-                        {"username": post_exists["author_username"]},
-                        {
-                            "$set": {
-                                "posts_count": -1,
-                                "updated_at": datetime.now(timezone.utc),
-                            }
-                        },
+                user_is_author = user.can_create_posts()
+                if not user_is_author:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="You dont have Permissions",
                     )
 
-                    deleted_post = await posts_collection.delete_one(
-                        {"slug": post_slug}
-                    )
+                else:
+                    if (
+                        user.role == "author"
+                        and post_exists["author_username"] == user.username
+                    ) or user.role == "admin":
+                        await posts_collection.update_one(
+                            {"slug": slug},
+                            {
+                                "$set": {
+                                    "status": "published",
+                                    "published_at": datetime.now(timezone.utc),
+                                }
+                            },
+                        )
+                        updated_post = Post.from_mongo_dict(
+                            await posts_collection.find_one({"slug": slug})
+                        )
 
-                    if deleted_post.deleted_count >= 1:
-                        return True
+                        if updated_post.status != "published":
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="Could not publish post, try again",
+                            )
+                        else:
+                            return updated_post
+
                     else:
-                        return False
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="You dont have Permissions",
+                        )
