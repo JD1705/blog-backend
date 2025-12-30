@@ -51,7 +51,7 @@ class User(MongoModel):
         mongo_dict = self.model_dump(by_alias=True, exclude={"id"})
         if "_id" not in mongo_dict:
             mongo_dict["_id"] = self.id
-        return mongo_dict
+            return mongo_dict
 
     # Métodos estáticos (de clase) para operaciones de base de datos
     @classmethod
@@ -59,7 +59,7 @@ class User(MongoModel):
         """Crea una instancia User desde un documento de MongoDB"""
         if "_id" in data.keys():
             data["_id"] = str(data["_id"])
-        return cls(**data)
+            return cls(**data)
 
     @classmethod
     def get_indexes(cls) -> List[IndexModel]:
