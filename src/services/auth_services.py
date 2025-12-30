@@ -11,7 +11,6 @@ class AuthService:
     def __init__(self):
         self.database = db
         self.users = self.database.users
-        self.token = self.database.token_blacklist
 
     async def register_user(self, user_data: UserCreate) -> User:  # type: ignore
         collection = self.users
@@ -66,7 +65,7 @@ class AuthService:
                 )
 
     async def logout_user(self, token: str, expires_time: int = 24) -> bool:
-        collection = self.token_blacklist
+        collection = self.database.token_blacklist
         expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_time)
 
         blacklisted_token = TokenBlacklist(token=token, expires_at=expires_at)
@@ -75,7 +74,7 @@ class AuthService:
         return True
 
     async def is_blacklisted_token(self, token: str) -> bool:
-        collection = self.token_blacklist
+        collection = self.database.token_blacklist
 
         result = await collection.find_one({"token": token})
         if result is not None:
