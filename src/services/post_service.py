@@ -233,41 +233,103 @@ class PostService:
                 )
 
             else:
-                user_is_author = user.can_create_posts()
-                if not user_is_author:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="You dont have Permissions",
-                    )
-
+                if user is None:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
                 else:
-                    if (
-                        user.role == "author"
-                        and post_exists["author_username"] == user.username
-                    ) or user.role == "admin":
-                        await posts_collection.update_one(
-                            {"slug": slug},
-                            {
-                                "$set": {
-                                    "status": "published",
-                                    "published_at": datetime.now(timezone.utc),
-                                }
-                            },
-                        )
-                        updated_post = Post.from_mongo_dict(
-                            await posts_collection.find_one({"slug": slug})
-                        )
-
-                        if updated_post.status != "published":
-                            raise HTTPException(
-                                status_code=status.HTTP_400_BAD_REQUEST,
-                                detail="Could not publish post, try again",
-                            )
-                        else:
-                            return updated_post
-
-                    else:
+                    user_is_author = user.can_create_posts()
+                    if not user_is_author:
                         raise HTTPException(
                             status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="You dont have Permissions",
                         )
+
+                    else:
+                        if (
+                            user.role == "author"
+                            and post_exists["author_username"] == user.username
+                        ) or user.role == "admin":
+                            await posts_collection.update_one(
+                                {"slug": slug},
+                                {
+                                    "$set": {
+                                        "status": "published",
+                                        "updated_at": datetime.now(timezone.utc),
+                                        "published_at": datetime.now(timezone.utc),
+                                    }
+                                },
+                            )
+                            updated_post = Post.from_mongo_dict(
+                                await posts_collection.find_one({"slug": slug})
+                            )
+
+                            if updated_post.status != "published":
+                                raise HTTPException(
+                                    status_code=status.HTTP_400_BAD_REQUEST,
+                                    detail="Could not publish post, try again",
+                                )
+                            else:
+                                return updated_post
+
+                        else:
+                            raise HTTPException(
+                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail="You dont have Permissions",
+                            )
+
+    async def archive_post(self, slug: str, user: User) -> Post:
+        posts_collection = self.posts
+
+        post_exists = await posts_collection.find_one({"slug": slug})
+        if not post_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Post Not Found"
+            )
+
+        else:
+            if post_exists["status"] == "archived":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Post Already archived",
+                )
+            else:
+                if user is None:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST)
+                else:
+                    user_is_author = user.can_create_posts()
+                    if not user_is_author:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="You dont have Permissions",
+                        )
+
+                    else:
+                        if (
+                            user.role == "author"
+                            and post_exists["author_username"] == user.username
+                        ) or user.role == "admin":
+                            await posts_collection.update_one(
+                                {"slug": slug},
+                                {
+                                    "$set": {
+                                        "status": "archived",
+                                        "updated_at": datetime.now(timezone.utc),
+                                    }
+                                },
+                            )
+                            updated_post = Post.from_mongo_dict(
+                                await posts_collection.find_one({"slug": slug})
+                            )
+
+                            if updated_post.status != "archived":
+                                raise HTTPException(
+                                    status_code=status.HTTP_400_BAD_REQUEST,
+                                    detail="Could not archive post, try again",
+                                )
+                            else:
+                                return updated_post
+
+                        else:
+                            raise HTTPException(
+                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail="You dont have Permissions",
+                            )
