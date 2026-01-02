@@ -8,6 +8,7 @@ from schemas.post import PostCreate, PostFilters, PostUpdate, PostResponse
 router = APIRouter(prefix="/posts")
 
 
+# CRUD operations
 @router.post("/")
 async def create_posts(
     post_data: PostCreate,
@@ -110,6 +111,7 @@ async def delete_post(
         )
 
 
+# status update endpoints
 @router.post("/publish/{slug}")
 async def publish_post(
     slug: str,
