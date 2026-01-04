@@ -168,3 +168,25 @@ async def archive_post(
         updated_at=response.updated_at,
         published_at=response.published_at,
     )
+
+
+# search and listing endpoints
+@router.get("/")
+async def list_posts(
+    filters: PostFilters,
+    post_service: PostService = Depends(),
+    current_user: Optional[dict] = Depends(get_current_user),
+    page: int = 1,
+    limit: int = 10,
+):
+    if current_user is None:
+        response = await post_service.list_posts(
+            filters, current_user=None, page=page, per_page=limit
+        )
+    else:
+        user = User.from_mongo_dict(current_user)
+        response = await post_service.list_posts(
+            filters, current_user=user, page=page, per_page=limit
+        )
+
+    return response
