@@ -28,7 +28,7 @@ class PostService:
                 detail="Not Enought Permissions",
             )
 
-        slug = generate_slug(text=post_data.title)
+        slug = await verify_unique_slug(generate_slug(text=post_data.title))
         created_post = Post(
             **post_data.model_dump(),
             slug=slug,
@@ -345,20 +345,61 @@ class PostService:
         per_page: int = 10,
     ) -> tuple[List[Post], dict]:
         posts_collection = self.posts
-        user_collection = self.users
 
         query = {}
         metadata = {}
 
-        if (
-            current_user is None or current_user.role != "reader"
-        ) and filters.status is not None:
-            query["status"] = filters.status
-        else:
+        if filters.status is not None:
             query["status"] = "published"
 
         if filters.author_username is not None:
-            query["author"] = filters.author_username
+            query["author_username"] = filters.author_username
+
+        if filters.tags is not None:
+            query["tags"] = {"$all": filters.tags}
+
+        if filters.search is not None:
+            query["$text"] = {"$search": filters.search}
+
+        if filters.start_date is not None and filters.end_date is not None:
+            query["published_at"] = {
+                "$gte": filters.start_date,
+                "$lte": filters.end_date,
+            }
+
+        docs_count = await posts_collection.count_documents(query)
+        skip = (page - 1) * per_page
+        total_pages = (docs_count + per_page - 1) // per_page
+
+        cursor = await posts_collection.find(query).sort("published_at", DESCENDING).skip(skip).limit(per_page).to_list()
+
+        posts = []
+        for doc in cursor:
+            posts.append(Post.from_mongo_dict(doc))
+
+        metadata = {
+            "page": page,
+            "per_page": per_page,
+            "total": docs_count,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1,
+        }
+
+        return (posts, metadata)
+
+    async def list_self_posts(
+        self,
+        filters: PostFilters,
+        current_user: User,
+        page: int = 1,
+        per_page: int = 10,
+    ) -> tuple[List[Post], dict]:
+        posts_collection = self.posts
+
+        query = {"author_username":current_user.username}
+        metadata = {}
+
 
         if filters.tags is not None:
             query["tags"] = {"$all": filters.tags}
