@@ -9,7 +9,7 @@ from models.base import MongoModel
 
 async def create_indexes_for_model(model_class: Type[MongoModel], database):
     """
-    Crea todos los índices para un modelo específico.
+    Create all the indexes for an especific model.
     """
     collection_name = model_class.get_collection_name()
     indexes = model_class.get_indexes()
@@ -53,15 +53,15 @@ async def create_indexes_for_model(model_class: Type[MongoModel], database):
 
 async def create_all_indexes(database):
     """
-    Crea índices para todos los modelos registrados.
+    Create indexes for all the registered models.
     """
-    # from models.comment import Comment  # Futuro
+    from models.comment import Comment
     from models.token import TokenBlacklist
 
     from models.post import Post
     from models.user import User
 
-    models = [User, Post, TokenBlacklist]  # Agregar más modelos aquí
+    models = [User, Post, TokenBlacklist, Comment]  # Add more models here
 
     print("\033[32mINFO\033[0m:     Creating database indexes...")
 
@@ -77,6 +77,7 @@ class Database:
         self.database = None
         self.users = None
         self.posts = None
+        self.comments = None
         self.token_blacklist = None
 
     async def connect(self):
@@ -84,6 +85,7 @@ class Database:
         self.database = self.client[settings.database_name]
         self.users = self.database.users
         self.posts = self.database.posts
+        self.comments = self.database.comments
         self.token_blacklist = self.database.token_blacklist
 
         await self.client.aconnect()
