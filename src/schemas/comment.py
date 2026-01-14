@@ -2,17 +2,15 @@ from datetime import datetime, timezone
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 
-class CommentBase(BaseModel):
+
+class CommentCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=5000)
     parent_id: Optional[str] = None
-
-class CommentCreate(CommentBase):
-    pass
 
 class CommentUpdate(BaseModel):
     content: str
 
-class CommentResponse(CommentBase):
+class CommentResponse(BaseModel):
     id: str
     post_id: str
     author_id: str
