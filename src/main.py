@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from services.utility import lifespan
-from api.routes import auth, users, posts
+from api.routes import auth, users, posts, comments
 
 app = FastAPI(title="Blog API", lifespan=lifespan)
 
@@ -8,6 +8,7 @@ app = FastAPI(title="Blog API", lifespan=lifespan)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(posts.router)
+app.include_router(comments.router)
 
 
 @app.get("/")
