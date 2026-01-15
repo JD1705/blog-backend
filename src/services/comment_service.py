@@ -71,3 +71,42 @@ class CommentService:
                     {"$set": {"comments_count": post_exists["comments_count"] + 1}},
                 )
                 return comment_for_db
+
+    async def get_comments(
+        self, slug: str, sort_by: str, limit: int, offset: int, current_user: Optional[User]
+    ):
+        post = await self.posts.find_one({"slug": slug})
+
+        if not post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Post Not found"
+            )
+
+        query = {"post_id": post["_id"]}
+
+        if sort_by == "newest":
+            sort = [("created_at", -1)]
+        elif sort_by == "oldest":
+            sort = [("created_at", 1)]
+
+        cursor = (
+            await self.comments.find(query)
+            .sort(sort)
+            .limit(limit)
+            .skip(offset)
+            .to_list()
+        )
+
+        comments = []
+        for doc in cursor:
+            comments.append(Comment.from_mongo_dict(doc))
+
+        total = await self.comments.count_documents(query)
+        metadata = {
+            "total": total,
+            "returned": len(comments),
+            "sort": sort_by,
+            "has_more": (offset + len(comments)) < total
+        }
+
+        return comments, metadata
