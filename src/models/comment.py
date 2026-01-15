@@ -48,10 +48,11 @@ class Comment(MongoModel):
             data["author_id"] = str(data["author_id"])
             data["post_id"] = str(data["post_id"])
 
-            if "parent_id" in data is not None:
+            if data["parent_id"] is not None:
                 data["parent_id"] = str(data["parent_id"])
                 return cls(**data)
-            return cls(**data)
+            elif data["parent_id"] is None:
+                return cls(**data, exclude={"parent_id"})
 
     @classmethod
     def get_indexes(cls) -> List[IndexModel]:
