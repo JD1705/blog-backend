@@ -35,6 +35,20 @@ async def create_comment(
         replies_count=response.replies_count,
         post_id=str(response.post_id),
         updated_at=response.updated_at,
-        edited_at=response.edited_at
+        edited_at=response.edited_at,
     )
     return comment_response
+
+
+@router.get("/")
+async def get_comments_in_post(
+    slug: str,
+    comment_service: CommentService = Depends(),
+    current_user: Optional[dict] = Depends(get_current_user),
+    sort_by: str = "newest",
+    limit: int = 100,
+    offset: int = 0
+):
+    response = await comment_service.get_comments(slug, sort_by, limit, offset, current_user)
+
+    return response
