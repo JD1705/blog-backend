@@ -33,7 +33,7 @@ class CommentService:
         else:
             current_user = User.from_mongo_dict(user)
             post_exists = await post_collection.find_one({"slug": slug})
-            if not post_exists:
+            if not post_exists or post_exists["status"] != "published":
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND, detail="Post Not found"
                 )
