@@ -73,7 +73,12 @@ class CommentService:
                 return comment_for_db
 
     async def get_comments(
-        self, slug: str, sort_by: str, limit: int, offset: int, current_user: Optional[User]
+        self,
+        slug: str,
+        sort_by: str,
+        limit: int,
+        offset: int,
+        current_user: Optional[User],
     ):
         post = await self.posts.find_one({"slug": slug})
 
@@ -106,7 +111,67 @@ class CommentService:
             "total": total,
             "returned": len(comments),
             "sort": sort_by,
-            "has_more": (offset + len(comments)) < total
+            "has_more": (offset + len(comments)) < total,
         }
 
         return comments, metadata
+
+    async def update_comment(
+        self, slug: str, comment_id: str, update_data: CommentUpdate, current_user: dict
+    ):
+        post_exists = await self.posts.find_one({"slug": slug})
+        if not post_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Post Not found"
+            )
+
+        if current_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="You are Not Authenticated",
+            )
+
+        comment_exists = await self.comments.find_one({"_id": ObjectId(comment_id)})
+        if not comment_exists or post_exists["_id"] != comment_exists["post_id"]:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Comment Not found"
+            )
+
+        if comment_exists["is_deleted"] is True:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="This comment is deleted",
+            )
+
+        if comment_exists["author_id"] != current_user["_id"]:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="You Dont have permission to do this",
+            )
+
+        time_passed = datetime.now(timezone.utc) - comment_exists["created_at"].replace(tzinfo=timezone.utc)
+        minutes = time_passed.seconds / 60
+        if (
+            minutes > 15
+            and current_user["role"] != "admin"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Time expired to edit this comment",
+            )
+
+        await self.comments.update_one(
+            {"_id": ObjectId(comment_id)},
+            {
+                "$set": {
+                    "content": update_data.content,
+                    "updated_at": datetime.now(timezone.utc),
+                    "is_edited": True,
+                    "edited_at": datetime.now(timezone.utc),
+                }
+            },
+        )
+
+        updated_comment = await self.comments.find_one({"_id": ObjectId(comment_id)})
+
+        return Comment.from_mongo_dict(updated_comment)
