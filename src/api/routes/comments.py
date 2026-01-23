@@ -84,3 +84,13 @@ async def update_comment(
         edited_at=response.edited_at,
     )
     return comment_response
+
+
+@router.delete("/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_comment(
+    slug: str,
+    comment_id: str,
+    comment_service: CommentService = Depends(),
+    current_user: dict = Depends(get_current_user),
+):
+    await comment_service.delete_comment(slug, comment_id, current_user)
