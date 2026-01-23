@@ -104,7 +104,19 @@ class CommentService:
 
         comments = []
         for doc in cursor:
-            comments.append(Comment.from_mongo_dict(doc))
+            if doc["is_deleted"] is True and (current_user is not None and current_user["role"] != "admin"):
+                comments.append(
+                    {
+                        "content": "This comment has been deleted",
+                        "_id": str(doc["_id"]),
+                        "is_deleted": True,
+                        "parent_id": doc["parent_id"],
+                        "replies_count": doc["replies_count"],
+                        "created_at": doc["created_at"],
+                    }
+                )
+            else:
+                comments.append(Comment.from_mongo_dict(doc))
 
         total = await self.comments.count_documents(query)
         metadata = {
