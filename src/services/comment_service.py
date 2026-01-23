@@ -149,12 +149,11 @@ class CommentService:
                 detail="You Dont have permission to do this",
             )
 
-        time_passed = datetime.now(timezone.utc) - comment_exists["created_at"].replace(tzinfo=timezone.utc)
+        time_passed = datetime.now(timezone.utc) - comment_exists["created_at"].replace(
+            tzinfo=timezone.utc
+        )
         minutes = time_passed.seconds / 60
-        if (
-            minutes > 15
-            and current_user["role"] != "admin"
-        ):
+        if minutes > 15 and current_user["role"] != "admin":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Time expired to edit this comment",
@@ -175,3 +174,39 @@ class CommentService:
         updated_comment = await self.comments.find_one({"_id": ObjectId(comment_id)})
 
         return Comment.from_mongo_dict(updated_comment)
+
+    async def delete_comment(self, slug: str, comment_id: str, current_user: dict):
+        post_exists = await self.posts.find_one({"slug": slug})
+        if not post_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Post Not found"
+            )
+
+        if current_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="You are Not Authenticated",
+            )
+
+        comment_exists = await self.comments.find_one({"_id": ObjectId(comment_id)})
+        if not comment_exists or post_exists["_id"] != comment_exists["post_id"]:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Comment Not found"
+            )
+
+        if comment_exists["is_deleted"] is True:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="This comment is deleted",
+            )
+
+        if comment_exists["author_id"] != current_user["_id"]:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="You Dont have permission to do this",
+            )
+
+        await self.comments.update_one(
+            {"_id": ObjectId(comment_id)},
+            {"$set": {"is_deleted": True, "deleted_at": datetime.now(timezone.utc)}},
+        )
