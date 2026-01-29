@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from src.services.user_service import UserService
-from src.schemas.user import UserResponse, UserUpdate
+from services.user_service import UserService
+from schemas.user import UserResponse, UserUpdate
 from fastapi import HTTPException, status
 from datetime import datetime, timezone
 
@@ -45,7 +45,13 @@ async def test_get_user_profile_success(user_service, mock_current_user):
     """
     Test case for successful retrieval of user profile.
     """
-    pass
+    response = await user_service.get_user_profile(mock_current_user)
+
+    assert isinstance(response, UserResponse)
+    assert response.id == mock_current_user["_id"]
+    assert response.username == mock_current_user["username"]
+    assert response.bio == mock_current_user["bio"]
+    assert response.email == mock_current_user["email"]
 
 
 ################################################################################
