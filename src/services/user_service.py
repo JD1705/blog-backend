@@ -9,7 +9,8 @@ from models.token import TokenBlacklist
 
 class UserService:
     def __init__(self):
-        self.database = db.database
+        self.database = db
+        self.users = self.database.users
 
     async def get_user_profile(self, current_user: dict):
         user_data = UserResponse(
@@ -25,7 +26,7 @@ class UserService:
         return user_data
 
     async def update_user_profile(self, current_user: dict, update_data: UserUpdate):
-        collection = self.database.get_collection("users")  # type: ignore
+        collection = self.users
         data = update_data.model_dump()
         to_update = {}
         fields = ["email", "username", "bio"]
@@ -81,7 +82,7 @@ class UserService:
             )
 
     async def deactivate_user(self, current_user: dict):
-        collection = self.database.get_collection("users")  # type: ignore
+        collection = self.users
         await collection.update_one(
             {"_id": current_user["_id"]}, {"$set": {"is_active": False}}
         )
