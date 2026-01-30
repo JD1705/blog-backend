@@ -246,9 +246,18 @@ async def test_update_user_profile_partial_update(
 # deactivate_user tests
 ################################################################################
 @pytest.mark.asyncio
-@patch("src.core.database.db.database")
-async def test_deactivate_user_success(mock_db, user_service, mock_current_user):
+@patch("services.user_service.db", new_callable=AsyncMock)
+async def test_deactivate_user_success(mock_db, mock_current_user):
     """
     Test case for successful deactivation of a user.
     """
-    pass
+    mock_db.users.update_one.return_value = AsyncMock()
+
+    user_service = UserService()
+    await user_service.deactivate_user(mock_current_user)
+    
+    call_args, _ = mock_db.users.update_one.call_args
+    assert call_args[0] == {"_id": mock_current_user["_id"]}
+
+    update_set_payload = call_args[1]["$set"]
+    assert update_set_payload["is_active"] is False
