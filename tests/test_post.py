@@ -14,10 +14,10 @@ from fastapi import HTTPException, status
 @pytest.fixture
 def mock_author_user():
     return User(
-        id=str(ObjectId()),
+        id=str("60a7b1c3d4e5f6g7h8i9j0k1"),
         username="authoruser",
         email="author@example.com",
-        password_hash="hashedpassword",
+        hashed_password="hashedpassword",
         bio="Author bio",
         role="author",
         is_active=True,
@@ -33,7 +33,7 @@ def mock_admin_user():
         id=str(ObjectId()),
         username="adminuser",
         email="admin@example.com",
-        password_hash="hashedpassword",
+        hashed_password="hashedpassword",
         bio="Admin bio",
         role="admin",
         is_active=True,
@@ -49,9 +49,9 @@ def mock_regular_user():
         id=str(ObjectId()),
         username="regularuser",
         email="regular@example.com",
-        password_hash="hashedpassword",
+        hashed_password="hashedpassword",
         bio="Regular user bio",
-        role="user",
+        role="reader",
         is_active=True,
         posts_count=0,
         created_at=datetime.now(timezone.utc),
@@ -107,20 +107,53 @@ def mock_post(mock_author_user):
 ################################################################################
 # create_post tests
 ################################################################################
+@patch("services.post_service.verify_unique_slug", new_callable=AsyncMock)
+@patch("services.post_service.db.database",  new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_create_post_success(mock_post_create, mock_author_user):
+async def test_create_post_success(mock_db, mock_verify_slug, mock_post_create, mock_author_user):
     """
     Test case for successful creation of a post by an authorized user.
     """
-    pass # TODO: Implement test
+    mock_verify_slug.return_value = "test-post-title"
+    mock_db.users.update_one.return_value = AsyncMock()
+    mock_db.posts.insert_one.return_value = AsyncMock()
+    
+    post_service = PostService()
+    response = await post_service.create_post(mock_post_create, mock_author_user)
 
+    assert isinstance(response, Post)
+    assert response.slug == "test-post-title"
+    assert response.author_username == mock_author_user.username
+    assert response.author_id == mock_author_user.id
+
+    mock_db.users.update_one.assert_called_once()
+    call_args, _ = mock_db.users.update_one.call_args
+    assert call_args[0] == {"_id": mock_author_user.id}
+
+    # Check the $set operator content
+    update_set_payload = call_args[1]["$set"]
+    assert update_set_payload["posts_count"] == mock_author_user.posts_count
+    assert "updated_at" in update_set_payload # Check that updated_at was added
+
+    mock_db.posts.insert_one.assert_called_once()
+
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_create_post_unauthorized(mock_post_create, mock_regular_user):
+async def test_create_post_unauthorized(mock_db, mock_post_create, mock_regular_user):
     """
     Test case for creating a post by an unauthorized user.
     """
-    pass # TODO: Implement test
+    with pytest.raises(HTTPException) as excinfo:
+        post_service = PostService()
 
+        response = await post_service.create_post(mock_post_create, mock_regular_user)
+
+    assert excinfo.value.detail == "Not Enought Permissions"
+    assert excinfo.value.status_code == 401
+
+    mock_db.users.update_one.assert_not_called()
+    mock_db.posts.insert_one.assert_not_called()
 
 ################################################################################
 # get_post_by_slug tests
