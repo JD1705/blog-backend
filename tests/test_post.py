@@ -158,33 +158,114 @@ async def test_create_post_unauthorized(mock_db, mock_post_create, mock_regular_
 ################################################################################
 # get_post_by_slug tests
 ################################################################################
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_get_post_by_slug_success_published(mock_post):
+async def test_get_post_by_slug_success_published(mock_db, mock_post):
     """
     Test case for successfully retrieving a published post by slug.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.return_value = mock_post.to_mongo_dict()
+    mock_db.posts.update_one.return_value = AsyncMock()
 
+    post_service = PostService()
+
+    response = await post_service.get_post_by_slug("existing-post")
+
+    assert isinstance(response, Post)
+    assert response.slug == "existing-post"
+    assert response.author_username == "authoruser"
+
+    mock_db.posts.update_one.assert_called_once()
+    call_args, _ = mock_db.posts.update_one.call_args
+    assert call_args[0] == {"slug": "existing-post"}
+
+    # Check the $set operator content
+    update_set_payload = call_args[1]["$inc"]
+    assert update_set_payload["view_count"] == 1
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_get_post_by_slug_not_found():
+async def test_get_post_by_slug_not_found(mock_db):
     """
     Test case for retrieving a non-existent post.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.return_value = None
+    with pytest.raises(HTTPException) as excinfo:
+        post_service = PostService()
 
+        await post_service.get_post_by_slug("not-existing-post")
+
+    assert excinfo.value.detail == "Post Not Found"
+    assert excinfo.value.status_code == 404
+
+    mock_db.posts.update_one.assert_not_called()
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_get_post_by_slug_draft_unauthorized(mock_author_user):
+async def test_get_post_by_slug_draft_unauthorized(mock_db, mock_regular_user):
     """
     Test case for retrieving a draft post by an unauthorized user.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.return_value = {
+        "_id":str(ObjectId()),
+        "title":"Existing Post",
+        "content":"Content of existing post.",
+        "slug":"existing-post",
+        "author_username":"authoruser",
+        "author_id":str("60a7b1c3d4e5f6g7h8i9j0k1"),
+        "tags":["existing"],
+        "featured_image":"http://example.com/existing.jpg",
+        "status":"draft",
+        "view_count":10,
+        "comments_count":2,
+        "created_at":datetime.now(timezone.utc),
+        "updated_at":datetime.now(timezone.utc),
+        "published_at":None,
 
+    }
+    
+    with pytest.raises(HTTPException) as excinfo:
+        post_service = PostService()
+
+        await post_service.get_post_by_slug("existing-post", mock_regular_user.model_dump())
+
+    assert excinfo.value.detail == "Post Not Found"
+    assert excinfo.value.status_code == 404
+
+    mock_db.posts.update_one.assert_not_called()
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_get_post_by_slug_draft_authorized(mock_post, mock_author_user):
+async def test_get_post_by_slug_draft_authorized(mock_db, mock_author_user):
     """
     Test case for retrieving a draft post by an authorized user (author or admin).
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.return_value = {
+        "_id":str(ObjectId()),
+        "title":"Existing Post",
+        "content":"Content of existing post.",
+        "slug":"existing-post",
+        "author_username":"authoruser",
+        "author_id":mock_author_user.id,
+        "tags":["existing"],
+        "featured_image":"http://example.com/existing.jpg",
+        "status":"draft",
+        "view_count":10,
+        "comments_count":2,
+        "created_at":datetime.now(timezone.utc),
+        "updated_at":datetime.now(timezone.utc),
+        "published_at":None,
+
+    }
+    post_service = PostService()
+
+    response = await post_service.get_post_by_slug("existing-post", mock_author_user.model_dump())
+
+    assert isinstance(response, Post)
+    assert response.slug == "existing-post"
+    assert response.author_username == "authoruser"
+
+    mock_db.posts.update_one.assert_not_called()
 
 
 ################################################################################
