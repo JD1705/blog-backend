@@ -103,6 +103,26 @@ def mock_post(mock_author_user):
         published_at=datetime.now(timezone.utc),
     )
 
+@pytest.fixture
+def mock_post_json(mock_author_user):
+    return {
+        "_id":str(ObjectId()),
+        "title":"Existing Post",
+        "content":"Content of existing post.",
+        "slug":"existing-post",
+        "author_username":"authoruser",
+        "author_id":mock_author_user.id,
+        "tags":["existing"],
+        "featured_image":"http://example.com/existing.jpg",
+        "status":"draft",
+        "view_count":10,
+        "comments_count":2,
+        "created_at":datetime.now(timezone.utc),
+        "updated_at":datetime.now(timezone.utc),
+        "published_at":None,
+
+    }
+
 
 ################################################################################
 # create_post tests
@@ -271,40 +291,128 @@ async def test_get_post_by_slug_draft_authorized(mock_db, mock_author_user):
 ################################################################################
 # update_post tests
 ################################################################################
+@patch("services.post_service.verify_unique_slug", new_callable=AsyncMock)
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_update_post_success_by_author(mock_post, mock_post_update, mock_author_user):
+async def test_update_post_success_by_author(mock_db, mock_verify_slug, mock_post_json, mock_post_update, mock_author_user):
     """
     Test case for successful update of a post by its author.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.side_effect = [mock_post_json, {
+        "_id":str(ObjectId()),
+        "title":"Updated Post Title",
+        "content":"This is the updated content.",
+        "slug":"updated-post-title",
+        "author_username":"authoruser",
+        "author_id":mock_author_user.id,
+        "tags":["existing", "updated", "python", "fastapi"],
+        "featured_image":"http://example.com/existing.jpg",
+        "status":"draft",
+        "view_count":10,
+        "comments_count":2,
+        "created_at":datetime.now(timezone.utc),
+        "updated_at":datetime.now(timezone.utc),
+        "published_at":None,
 
+    }
+]
+    mock_db.posts.update_one.return_value = AsyncMock()
+
+    mock_verify_slug.return_value = "updated-post-title"
+
+    post_service = PostService()
+
+    response = await post_service.update_post("existing-post", mock_post_update, mock_author_user)
+    
+    assert isinstance(response, Post)
+    assert response.title == mock_post_update.title
+    assert response.content == mock_post_update.content
+    assert response.slug == "updated-post-title"
+    for i in mock_post_update.tags:
+        assert i in response.tags
+
+    mock_db.posts.find_one.assert_called()
+    mock_db.posts.update_one.assert_called_once()
+
+
+@patch("services.post_service.verify_unique_slug", new_callable=AsyncMock)
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_update_post_success_by_admin(mock_post, mock_post_update, mock_admin_user):
+async def test_update_post_success_by_admin(mock_db, mock_verify_slug, mock_post_json, mock_post_update, mock_admin_user):
     """
     Test case for successful update of a post by an admin.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.side_effect = [mock_post_json, {
+        "_id":str(ObjectId()),
+        "title":"Updated Post Title",
+        "content":"This is the updated content.",
+        "slug":"updated-post-title",
+        "author_username":"authoruser",
+        "author_id":mock_post_json["author_id"],
+        "tags":["existing", "updated", "python", "fastapi"],
+        "featured_image":"http://example.com/existing.jpg",
+        "status":"draft",
+        "view_count":10,
+        "comments_count":2,
+        "created_at":datetime.now(timezone.utc),
+        "updated_at":datetime.now(timezone.utc),
+        "published_at":None,
 
+    }
+]
+    mock_db.posts.update_one.return_value = AsyncMock()
+
+    mock_verify_slug.return_value = "updated-post-title"
+
+    post_service = PostService()
+
+    response = await post_service.update_post("existing-post", mock_post_update, mock_admin_user)
+    
+    assert isinstance(response, Post)
+    assert response.title == mock_post_update.title
+    assert response.content == mock_post_update.content
+    assert response.slug == "updated-post-title"
+    for i in mock_post_update.tags:
+        assert i in response.tags
+
+    mock_db.posts.find_one.assert_called()
+    mock_db.posts.update_one.assert_called_once()
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_update_post_not_found(mock_post_update, mock_author_user):
+async def test_update_post_not_found(mock_db, mock_post_update, mock_author_user):
     """
     Test case for updating a non-existent post.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.return_value = None
 
+    with pytest.raises(HTTPException) as excinfo:
+        post_service = PostService()
+
+        await post_service.update_post("not-existing-post", mock_post_update, mock_author_user)
+
+    assert excinfo.value.status_code == 404
+    assert excinfo.value.detail == "Post Not Found"
+
+    mock_db.posts.find_one.assert_called_once()
+    mock_db.posts.update_one.assert_not_called()
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_update_post_unauthorized_other_author(mock_post, mock_post_update, mock_regular_user):
+async def test_update_post_unauthorized_other_author(mock_db, mock_post_json, mock_post_update, mock_regular_user):
     """
     Test case for unauthorized update of a post by another regular user.
     """
-    pass # TODO: Implement test
+    with pytest.raises(HTTPException) as excinfo:
+        post_service = PostService()
 
-@pytest.mark.asyncio
-async def test_update_post_unauthorized_regular_user(mock_post, mock_post_update, mock_regular_user):
-    """
-    Test case for unauthorized update of a post by a regular user (not an author).
-    """
-    pass # TODO: Implement test
+        await post_service.update_post("existing-post", mock_post_update, mock_regular_user)
+
+    assert excinfo.value.status_code == 401
+    assert excinfo.value.detail == "You dont have Permissions"
+
+    mock_db.posts.find_one.assert_not_called()
+    mock_db.posts.update_one.assert_not_called()
 
 
 ################################################################################
