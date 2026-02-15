@@ -418,34 +418,98 @@ async def test_update_post_unauthorized_other_author(mock_db, mock_post_json, mo
 ################################################################################
 # delete_post tests
 ################################################################################
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_delete_post_success_by_author(mock_post, mock_author_user):
+async def test_delete_post_success_by_author(mock_db, mock_post_json, mock_author_user):
     """
     Test case for successful deletion of a post by its author.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.return_value = mock_post_json
+    mock_db.users.update_one.return_value = AsyncMock()
+    mock_db.posts.delete_one.return_value.deleted_count = 1
+    
+    post_service = PostService()
 
+    response = await post_service.delete_post("existing-post", mock_author_user)
+
+    assert response is True
+    
+    mock_db.users.update_one.assert_called_once()
+    call_args, _ = mock_db.users.update_one.call_args
+    assert call_args[0] == {"username": mock_post_json["author_username"]}
+
+    update_set_payload = call_args[1]["$set"]
+    assert update_set_payload["posts_count"] == -1
+    assert "updated_at" in update_set_payload 
+
+    mock_db.posts.find_one.assert_called_once_with({"slug":"existing-post"})
+    mock_db.posts.delete_one.assert_called_once_with({"slug":"existing-post"})
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_delete_post_success_by_admin(mock_post, mock_admin_user):
+async def test_delete_post_success_by_admin(mock_db, mock_post_json, mock_admin_user):
     """
     Test case for successful deletion of a post by an admin.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.return_value = mock_post_json
+    mock_db.users.update_one.return_value = AsyncMock()
+    mock_db.posts.delete_one.return_value.deleted_count = 1
+    
+    post_service = PostService()
 
+    response = await post_service.delete_post("existing-post", mock_admin_user)
+
+    assert response is True
+    
+    mock_db.users.update_one.assert_called_once()
+    call_args, _ = mock_db.users.update_one.call_args
+    assert call_args[0] == {"username": mock_post_json["author_username"]}
+
+    update_set_payload = call_args[1]["$set"]
+    assert update_set_payload["posts_count"] == -1
+    assert "updated_at" in update_set_payload 
+
+    mock_db.posts.find_one.assert_called_once_with({"slug":"existing-post"})
+    mock_db.posts.delete_one.assert_called_once_with({"slug":"existing-post"})
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_delete_post_not_found(mock_author_user):
+async def test_delete_post_not_found(mock_db, mock_author_user):
     """
     Test case for deleting a non-existent post.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.return_value = None
 
+    with pytest.raises(HTTPException) as excinfo:
+        post_service = PostService()
+
+        await post_service.delete_post("not-existing-post", mock_author_user)
+
+    assert excinfo.value.detail == "Post Not Found"
+    assert excinfo.value.status_code == 404
+
+    mock_db.posts.delete_one.assert_not_called()
+    mock_db.users.update_one.assert_not_called()
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_delete_post_unauthorized_other_author(mock_post, mock_regular_user):
+async def test_delete_post_unauthorized_other_author(mock_db, mock_post_json, mock_regular_user):
     """
     Test case for unauthorized deletion of a post by another user.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.return_value = mock_post_json
 
+    with pytest.raises(HTTPException) as excinfo:
+        post_service = PostService()
+
+        await post_service.delete_post("existing-post", mock_regular_user)
+
+    assert excinfo.value.detail == "You dont have Permissions"
+    assert excinfo.value.status_code == 401
+
+    mock_db.posts.find_one.assert_called_once_with({"slug":"existing-post"})
+    mock_db.posts.delete_one.assert_not_called()
+    mock_db.users.update_one.assert_not_called()
 
 ################################################################################
 # publish_post tests
