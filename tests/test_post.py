@@ -514,34 +514,116 @@ async def test_delete_post_unauthorized_other_author(mock_db, mock_post_json, mo
 ################################################################################
 # publish_post tests
 ################################################################################
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_publish_post_success(mock_post, mock_author_user):
+async def test_publish_post_success(mock_db, mock_post_json, mock_author_user):
     """
     Test case for successfully publishing a draft post.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.side_effect = [mock_post_json, {
+        "_id":str(ObjectId()),
+        "title":"Existing Post",
+        "content":"Content of existing post.",
+        "slug":"existing-post",
+        "author_username":"authoruser",
+        "author_id":mock_author_user.id,
+        "tags":["existing"],
+        "featured_image":"http://example.com/existing.jpg",
+        "status":"published",
+        "view_count":10,
+        "comments_count":2,
+        "created_at":datetime.now(timezone.utc),
+        "updated_at":datetime.now(timezone.utc),
+        "published_at":datetime.now(timezone.utc)
+    }
+]
+    mock_db.posts.update_one.return_value = AsyncMock()
+    
+    post_service = PostService()
+    response = await post_service.publish_post("existing-post", mock_author_user)
 
+    assert response.status == "published"
+    mock_db.posts.update_one.assert_called_once()
+    call_args, _ = mock_db.posts.update_one.call_args
+    assert call_args[0] == {"slug": "existing-post"}
+
+    update_set_payload = call_args[1]["$set"]
+    assert update_set_payload["status"] == "published"
+    assert "updated_at" in update_set_payload
+    assert "published_at" in update_set_payload
+
+    mock_db.posts.find_one.assert_called()
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_publish_post_already_published(mock_post, mock_author_user):
+async def test_publish_post_already_published(mock_db, mock_author_user):
     """
     Test case for attempting to publish an already published post.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.return_value = {
+        "_id":str(ObjectId()),
+        "title":"Existing Post",
+        "content":"Content of existing post.",
+        "slug":"existing-post",
+        "author_username":"authoruser",
+        "author_id":mock_author_user.id,
+        "tags":["existing"],
+        "featured_image":"http://example.com/existing.jpg",
+        "status":"published",
+        "view_count":10,
+        "comments_count":2,
+        "created_at":datetime.now(timezone.utc),
+        "updated_at":datetime.now(timezone.utc),
+        "published_at":datetime.now(timezone.utc)
+    }
+    
+    with pytest.raises(HTTPException) as excinfo:
+        post_service = PostService()
 
+        await post_service.publish_post("existing-post", mock_author_user)
+
+    assert excinfo.value.detail == "Post Already published"
+    assert excinfo.value.status_code == 409
+
+    mock_db.posts.find_one.assert_called_once()
+    mock_db.posts.update_one.assert_not_called()
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_publish_post_not_found(mock_author_user):
+async def test_publish_post_not_found(mock_db, mock_author_user):
     """
     Test case for publishing a non-existent post.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.return_value = None
 
+    with pytest.raises(HTTPException) as excinfo:
+        post_service = PostService()
+
+        await post_service.delete_post("not-existing-post", mock_author_user)
+
+    assert excinfo.value.detail == "Post Not Found"
+    assert excinfo.value.status_code == 404
+
+    mock_db.users.update_one.assert_not_called()
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_publish_post_unauthorized(mock_post, mock_regular_user):
+async def test_publish_post_unauthorized(mock_db, mock_post_json, mock_regular_user):
     """
     Test case for unauthorized publishing of a post by a regular user.
     """
-    pass # TODO: Implement test
+    mock_db.posts.find_one.return_value = mock_post_json
 
+    with pytest.raises(HTTPException) as excinfo:
+        post_service = PostService()
+
+        await post_service.delete_post("existing-post", mock_regular_user)
+
+    assert excinfo.value.detail == "You dont have Permissions"
+    assert excinfo.value.status_code == 401
+
+    mock_db.posts.find_one.assert_called_once_with({"slug":"existing-post"})
+    mock_db.posts.update_one.assert_not_called()
 
 ################################################################################
 # archive_post tests
