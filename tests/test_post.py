@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 from bson import ObjectId
 
@@ -122,6 +122,29 @@ def mock_post_json(mock_author_user):
         "published_at":None,
 
     }
+
+@pytest.fixture
+def mock_many_posts_json(mock_author_user):
+    posts = []
+    for i in range(25):
+        post_data = {
+            "_id": str(ObjectId()),
+            "title": f"Post Title {i}",
+            "content": f"Content of post {i}.",
+            "slug": f"post-title-{i}",
+            "author_username": mock_author_user.username,
+            "author_id": mock_author_user.id,
+            "tags": ["test", f"tag-{i % 3}"],
+            "featured_image": "http://example.com/image.jpg",
+            "status": "published",
+            "view_count": i,
+            "comments_count": i % 5,
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+            "published_at": datetime.now(timezone.utc),
+        }
+        posts.append(post_data)
+    return posts
 
 
 ################################################################################
@@ -742,69 +765,428 @@ async def test_archive_post_unauthorized(mock_db, mock_post_json, mock_regular_u
 ################################################################################
 # list_posts tests
 ################################################################################
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_list_posts_no_filters():
+async def test_list_posts_no_filters(mock_db, mock_post_json, mock_regular_user):
     """
     Test case for listing all published posts without any filters.
     """
-    pass # TODO: Implement test
+    mock_db.posts.count_documents.return_value = 1
 
+    mock_find_result = MagicMock()
+    mock_find_result.sort.return_value = mock_find_result
+    mock_find_result.skip.return_value = mock_find_result
+    mock_find_result.limit.return_value = mock_find_result
+
+    mock_find_result.to_list = AsyncMock(return_value=[mock_post_json])
+
+    mock_db.posts.find = MagicMock(return_value=mock_find_result)
+
+    post_filters = PostFilters()
+    post_service = PostService()
+
+    posts, metadata = await post_service.list_posts(post_filters, mock_regular_user)
+
+    assert isinstance(posts, list)
+    assert len(posts) == 1
+    assert isinstance(posts[0], Post)
+    assert posts[0].slug == mock_post_json["slug"]
+
+    assert metadata["page"] == 1
+    assert metadata["per_page"] == 10
+    assert metadata["total"] == 1 # docs_count
+    assert metadata["total_pages"] == 1
+    assert metadata["has_next"] is False
+    assert metadata["has_prev"] is False
+
+    mock_db.posts.count_documents.assert_called_once_with({"status": "published"})
+    mock_db.posts.find.assert_called_once_with({"status": "published"})
+
+    mock_find_result.sort.assert_called_once_with("published_at", -1)
+    mock_find_result.skip.assert_called_once_with(0)
+    mock_find_result.limit.assert_called_once_with(10)
+    mock_find_result.to_list.assert_called_once()
+
+
+@patch("services.post_service.db.database", new_callable=AsyncMock)
 @pytest.mark.asyncio
-async def test_list_posts_with_status_filter(mock_post_filters):
+async def test_list_posts_with_status_filter(mock_posts_collection, mock_regular_user, mock_post_json):
     """
     Test case for listing posts with a status filter.
     """
-    pass # TODO: Implement test
+    # Create a published version of the mock post
+    published_post_json = mock_post_json.copy()
+    published_post_json["status"] = "published"
+    published_post_json["published_at"] = datetime.now(timezone.utc)
 
+    # Mock count_documents
+    mock_posts_collection.posts.count_documents = AsyncMock(return_value=1)
+    
+    # Configure the mock for chained calls
+    mock_to_list_awaitable = AsyncMock(return_value=[published_post_json])
+    mock_cursor_object = MagicMock()
+    mock_cursor_object.sort.return_value = mock_cursor_object
+    mock_cursor_object.skip.return_value = mock_cursor_object
+    mock_cursor_object.limit.return_value = mock_cursor_object
+    mock_cursor_object.to_list = mock_to_list_awaitable
+    mock_posts_collection.posts.find = MagicMock(return_value=mock_cursor_object)
+
+    post_filters = PostFilters(status="published")
+    post_service = PostService()
+
+    posts, metadata = await post_service.list_posts(post_filters, mock_regular_user)
+
+    assert isinstance(posts, list)
+    assert len(posts) == 1
+    assert isinstance(posts[0], Post)
+    assert posts[0].slug == published_post_json["slug"]
+    assert posts[0].status == "published"
+
+    assert metadata["total"] == 1
+    assert metadata["total_pages"] == 1
+
+    mock_posts_collection.posts.count_documents.assert_called_once_with({"status": "published"})
+    mock_posts_collection.posts.find.assert_called_once_with({"status": "published"})
+    mock_cursor_object.sort.assert_called_once_with("published_at", -1)
+    mock_cursor_object.skip.assert_called_once_with(0)
+    mock_cursor_object.limit.assert_called_once_with(10)
+    mock_to_list_awaitable.assert_called_once()
+
+
+@patch("services.post_service.db.database")
 @pytest.mark.asyncio
-async def test_list_posts_with_author_filter(mock_post_filters):
+async def test_list_posts_with_author_filter(mock_posts_collection, mock_regular_user, mock_post_json):
     """
     Test case for listing posts with an author filter.
     """
-    pass # TODO: Implement test
+    # mock_post_json already has author_username="authoruser"
+    
+    # Mock count_documents
+    mock_posts_collection.posts.count_documents = AsyncMock(return_value=1)
+    
+    # Configure the mock for chained calls
+    mock_to_list_awaitable = AsyncMock(return_value=[mock_post_json])
+    mock_cursor_object = MagicMock()
+    mock_cursor_object.sort.return_value = mock_cursor_object
+    mock_cursor_object.skip.return_value = mock_cursor_object
+    mock_cursor_object.limit.return_value = mock_cursor_object
+    mock_cursor_object.to_list = mock_to_list_awaitable
+    mock_posts_collection.posts.find = MagicMock(return_value=mock_cursor_object)
 
+    author_username_filter = "authoruser"
+    post_filters = PostFilters(author_username=author_username_filter)
+    post_service = PostService()
+
+    posts, metadata = await post_service.list_posts(post_filters, mock_regular_user)
+
+    assert isinstance(posts, list)
+    assert len(posts) == 1
+    assert isinstance(posts[0], Post)
+    assert posts[0].author_username == author_username_filter
+
+    assert metadata["total"] == 1
+    assert metadata["total_pages"] == 1
+
+    # Verify calls
+    mock_posts_collection.posts.count_documents.assert_called_once_with({
+        "status": "published", # The code always adds status="published" for list_posts
+        "author_username": author_username_filter
+    })
+    mock_posts_collection.posts.find.assert_called_once_with({
+        "status": "published",
+        "author_username": author_username_filter
+    })
+    mock_cursor_object.sort.assert_called_once_with("published_at", -1)
+    mock_cursor_object.skip.assert_called_once_with(0)
+    mock_cursor_object.limit.assert_called_once_with(10)
+    mock_to_list_awaitable.assert_called_once()
+
+
+@patch("services.post_service.db.database")
 @pytest.mark.asyncio
-async def test_list_posts_with_tags_filter(mock_post_filters):
+async def test_list_posts_with_tags_filter(mock_posts_collection, mock_regular_user, mock_post_json):
     """
     Test case for listing posts with a tags filter.
     """
-    pass # TODO: Implement test
+    # mock_post_json already has tags=["existing"]
+    
+    # Mock count_documents
+    mock_posts_collection.posts.count_documents = AsyncMock(return_value=1)
+    
+    # Configure the mock for chained calls
+    mock_to_list_awaitable = AsyncMock(return_value=[mock_post_json])
+    mock_cursor_object = MagicMock()
+    mock_cursor_object.sort.return_value = mock_cursor_object
+    mock_cursor_object.skip.return_value = mock_cursor_object
+    mock_cursor_object.limit.return_value = mock_cursor_object
+    mock_cursor_object.to_list = mock_to_list_awaitable
+    mock_posts_collection.posts.find = MagicMock(return_value=mock_cursor_object)
 
+    tags_filter = ["existing"]
+    post_filters = PostFilters(tags=tags_filter)
+    post_service = PostService()
+
+    posts, metadata = await post_service.list_posts(post_filters, mock_regular_user)
+
+    assert isinstance(posts, list)
+    assert len(posts) == 1
+    assert isinstance(posts[0], Post)
+    # Check if all tags in the filter are present in the post's tags
+    assert all(tag in posts[0].tags for tag in tags_filter)
+
+    assert metadata["total"] == 1
+    assert metadata["total_pages"] == 1
+
+    # Verify calls
+    mock_posts_collection.posts.count_documents.assert_called_once_with({
+        "status": "published",
+        "tags": {"$all": tags_filter}
+    })
+    mock_posts_collection.posts.find.assert_called_once_with({
+        "status": "published",
+        "tags": {"$all": tags_filter}
+    })
+    mock_cursor_object.sort.assert_called_once_with("published_at", -1)
+    mock_cursor_object.skip.assert_called_once_with(0)
+    mock_cursor_object.limit.assert_called_once_with(10)
+    mock_to_list_awaitable.assert_called_once()
+
+
+@patch("services.post_service.db.database")
 @pytest.mark.asyncio
-async def test_list_posts_with_search_filter(mock_post_filters):
+async def test_list_posts_with_search_filter(mock_posts_collection, mock_regular_user, mock_post_json):
     """
     Test case for listing posts with a search filter.
     """
-    pass # TODO: Implement test
+    # mock_post_json title: "Existing Post", content: "Content of existing post."
+    
+    # Mock count_documents
+    mock_posts_collection.posts.count_documents = AsyncMock(return_value=1)
+    
+    # Configure the mock for chained calls
+    mock_to_list_awaitable = AsyncMock(return_value=[mock_post_json])
+    mock_cursor_object = MagicMock()
+    mock_cursor_object.sort.return_value = mock_cursor_object
+    mock_cursor_object.skip.return_value = mock_cursor_object
+    mock_cursor_object.limit.return_value = mock_cursor_object
+    mock_cursor_object.to_list = mock_to_list_awaitable
+    mock_posts_collection.posts.find = MagicMock(return_value=mock_cursor_object)
 
+    search_query = "existing"
+    post_filters = PostFilters(search=search_query)
+    post_service = PostService()
+
+    posts, metadata = await post_service.list_posts(post_filters, mock_regular_user)
+
+    assert isinstance(posts, list)
+    assert len(posts) == 1
+    assert isinstance(posts[0], Post)
+    assert search_query in posts[0].title.lower() or search_query in posts[0].content.lower()
+
+    assert metadata["total"] == 1
+    assert metadata["total_pages"] == 1
+
+    # Verify calls
+    mock_posts_collection.posts.count_documents.assert_called_once_with({
+        "status": "published",
+        "$text": {"$search": search_query}
+    })
+    mock_posts_collection.posts.find.assert_called_once_with({
+        "status": "published",
+        "$text": {"$search": search_query}
+    })
+    mock_cursor_object.sort.assert_called_once_with("published_at", -1)
+    mock_cursor_object.skip.assert_called_once_with(0)
+    mock_cursor_object.limit.assert_called_once_with(10)
+    mock_to_list_awaitable.assert_called_once()
+
+
+@patch("services.post_service.db.database")
 @pytest.mark.asyncio
-async def test_list_posts_pagination():
+async def test_list_posts_pagination(mock_posts_collection, mock_regular_user, mock_many_posts_json):
     """
     Test case for listing posts with pagination.
     """
-    pass # TODO: Implement test
+    total_posts = len(mock_many_posts_json)
+    page = 2
+    per_page = 10
+    skip = (page - 1) * per_page # Expected skip: 10
+    expected_posts_for_page = mock_many_posts_json[skip : skip + per_page] # Posts 10-19
+
+    mock_posts_collection.posts.count_documents = AsyncMock(return_value=total_posts)
+    
+    mock_to_list_awaitable = AsyncMock(return_value=expected_posts_for_page)
+    mock_cursor_object = MagicMock()
+    mock_cursor_object.sort.return_value = mock_cursor_object
+    mock_cursor_object.skip.return_value = mock_cursor_object
+    mock_cursor_object.limit.return_value = mock_cursor_object
+    mock_cursor_object.to_list = mock_to_list_awaitable
+    mock_posts_collection.posts.find = MagicMock(return_value=mock_cursor_object)
+
+    post_filters = PostFilters()
+    post_service = PostService()
+
+    posts, metadata = await post_service.list_posts(post_filters, mock_regular_user, page=page, per_page=per_page)
+
+    assert isinstance(posts, list)
+    assert len(posts) == per_page
+    assert posts[0].slug == Post.from_mongo_dict(expected_posts_for_page[0]).slug
+    assert posts[-1].slug == Post.from_mongo_dict(expected_posts_for_page[-1]).slug
+
+    assert metadata["page"] == page
+    assert metadata["per_page"] == per_page
+    assert metadata["total"] == total_posts
+    assert metadata["total_pages"] == (total_posts + per_page - 1) // per_page # (25 + 10 - 1) // 10 = 3
+    assert metadata["has_next"] is True # page 2 of 3
+    assert metadata["has_prev"] is True # page 2 of 3
+
+    mock_posts_collection.posts.count_documents.assert_called_once_with({"status": "published"})
+    mock_posts_collection.posts.find.assert_called_once_with({"status": "published"})
+    mock_cursor_object.sort.assert_called_once_with("published_at", -1)
+    mock_cursor_object.skip.assert_called_once_with(skip)
+    mock_cursor_object.limit.assert_called_once_with(per_page)
+    mock_to_list_awaitable.assert_called_once()
+
 
 
 ################################################################################
 # list_self_posts tests
 ################################################################################
+@patch("services.post_service.db.database")
 @pytest.mark.asyncio
-async def test_list_self_posts_success(mock_author_user):
+async def test_list_self_posts_success(mock_posts_collection, mock_author_user, mock_post_json):
     """
     Test case for successfully listing posts created by the current user.
     """
-    pass # TODO: Implement test
+    # mock_post_json already has author_username="authoruser" matching mock_author_user
+    
+    # Mock count_documents
+    mock_posts_collection.posts.count_documents = AsyncMock(return_value=1)
+    
+    # Configure the mock for chained calls
+    mock_to_list_awaitable = AsyncMock(return_value=[mock_post_json])
+    mock_cursor_object = MagicMock()
+    mock_cursor_object.sort.return_value = mock_cursor_object
+    mock_cursor_object.skip.return_value = mock_cursor_object
+    mock_cursor_object.limit.return_value = mock_cursor_object
+    mock_cursor_object.to_list = mock_to_list_awaitable
+    mock_posts_collection.posts.find = MagicMock(return_value=mock_cursor_object)
 
+    post_filters = PostFilters()
+    post_service = PostService()
+
+    posts, metadata = await post_service.list_self_posts(post_filters, mock_author_user)
+
+    assert isinstance(posts, list)
+    assert len(posts) == 1
+    assert isinstance(posts[0], Post)
+    assert posts[0].author_username == mock_author_user.username
+
+    assert metadata["total"] == 1
+    assert metadata["total_pages"] == 1
+
+    # Verify calls
+    mock_posts_collection.posts.count_documents.assert_called_once_with({
+        "author_username": mock_author_user.username
+    })
+    mock_posts_collection.posts.find.assert_called_once_with({
+        "author_username": mock_author_user.username
+    })
+    mock_cursor_object.sort.assert_called_once_with("published_at", -1)
+    mock_cursor_object.skip.assert_called_once_with(0)
+    mock_cursor_object.limit.assert_called_once_with(10)
+    mock_to_list_awaitable.assert_called_once()
+
+
+@patch("services.post_service.db.database")
 @pytest.mark.asyncio
-async def test_list_self_posts_with_filters(mock_author_user, mock_post_filters):
+async def test_list_self_posts_with_filters(mock_posts_collection, mock_author_user, mock_post_json):
     """
     Test case for listing posts by current user with filters.
     """
-    pass # TODO: Implement test
+    # mock_post_json already has author_username="authoruser" and tags=["existing"]
+    
+    # Mock count_documents
+    mock_posts_collection.posts.count_documents = AsyncMock(return_value=1)
+    
+    # Configure the mock for chained calls
+    mock_to_list_awaitable = AsyncMock(return_value=[mock_post_json])
+    mock_cursor_object = MagicMock()
+    mock_cursor_object.sort.return_value = mock_cursor_object
+    mock_cursor_object.skip.return_value = mock_cursor_object
+    mock_cursor_object.limit.return_value = mock_cursor_object
+    mock_cursor_object.to_list = mock_to_list_awaitable
+    mock_posts_collection.posts.find = MagicMock(return_value=mock_cursor_object)
 
+    tags_filter = ["existing"]
+    post_filters = PostFilters(tags=tags_filter)
+    post_service = PostService()
+
+    posts, metadata = await post_service.list_self_posts(post_filters, mock_author_user)
+
+    assert isinstance(posts, list)
+    assert len(posts) == 1
+    assert isinstance(posts[0], Post)
+    assert posts[0].author_username == mock_author_user.username
+    assert all(tag in posts[0].tags for tag in tags_filter)
+
+    assert metadata["total"] == 1
+    assert metadata["total_pages"] == 1
+
+    # Verify calls
+    expected_query = {
+        "author_username": mock_author_user.username,
+        "tags": {"$all": tags_filter}
+    }
+    mock_posts_collection.posts.count_documents.assert_called_once_with(expected_query)
+    mock_posts_collection.posts.find.assert_called_once_with(expected_query)
+    mock_cursor_object.sort.assert_called_once_with("published_at", -1)
+    mock_cursor_object.skip.assert_called_once_with(0)
+    mock_cursor_object.limit.assert_called_once_with(10)
+    mock_to_list_awaitable.assert_called_once()
+
+
+@patch("services.post_service.db.database")
 @pytest.mark.asyncio
-async def test_list_self_posts_no_posts(mock_author_user):
+async def test_list_self_posts_no_posts(mock_posts_collection, mock_author_user):
     """
     Test case for listing posts by current user when no posts exist.
     """
-    pass # TODO: Implement test
+    # Mock count_documents to return 0
+    mock_posts_collection.posts.count_documents = AsyncMock(return_value=0)
+    
+    # Configure the mock for chained calls to return an empty list
+    mock_to_list_awaitable = AsyncMock(return_value=[])
+    mock_cursor_object = MagicMock()
+    mock_cursor_object.sort.return_value = mock_cursor_object
+    mock_cursor_object.skip.return_value = mock_cursor_object
+    mock_cursor_object.limit.return_value = mock_cursor_object
+    mock_cursor_object.to_list = mock_to_list_awaitable
+    mock_posts_collection.posts.find = MagicMock(return_value=mock_cursor_object)
+
+    post_filters = PostFilters()
+    post_service = PostService()
+
+    posts, metadata = await post_service.list_self_posts(post_filters, mock_author_user)
+
+    assert isinstance(posts, list)
+    assert len(posts) == 0
+
+    assert metadata["page"] == 1
+    assert metadata["per_page"] == 10
+    assert metadata["total"] == 0
+    assert metadata["total_pages"] == 0
+    assert metadata["has_next"] is False
+    assert metadata["has_prev"] is False
+
+    # Verify calls
+    expected_query = {
+        "author_username": mock_author_user.username
+    }
+    mock_posts_collection.posts.count_documents.assert_called_once_with(expected_query)
+    mock_posts_collection.posts.find.assert_called_once_with(expected_query)
+    mock_cursor_object.sort.assert_called_once_with("published_at", -1)
+    mock_cursor_object.skip.assert_called_once_with(0)
+    mock_cursor_object.limit.assert_called_once_with(10)
+    mock_to_list_awaitable.assert_called_once()
+
