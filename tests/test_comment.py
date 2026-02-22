@@ -45,7 +45,7 @@ async def comment_service_instance(
 ):
     """Provides an instance of CommentService with mocked database collections."""
     # Patch the database connection to return our mock collections
-    mock_db = AsyncMock()
+    mock_db = MagicMock()
     mock_db.comments = mock_comments_collection
     mock_db.posts = mock_posts_collection
     mock_db.users = mock_users_collection
@@ -85,15 +85,15 @@ def admin_user_data():
 
 
 @pytest.fixture
-def mock_post_data(test_user_data):
+def mock_post_data(mock_user_data):
     """Returns sample post data."""
     return {
         "_id": ObjectId(),
         "title": "Test Post",
         "slug": "test-post",
         "content": "This is a test post.",
-        "author_id": test_user_data["_id"],
-        "author_username": test_user_data["username"],
+        "author_id": mock_user_data["_id"],
+        "author_username": mock_user_data["username"],
         "status": "published",
         "comments_count": 0,
         "created_at": datetime.now(timezone.utc),
@@ -114,13 +114,13 @@ def mock_comment_update_schema():
 
 
 @pytest.fixture
-def mock_comment_data(test_user_data, test_post_data):
+def mock_comment_data(mock_user_data, mock_post_data):
     """Returns sample comment data."""
     return {
         "_id": ObjectId(),
-        "post_id": str(test_post_data["_id"]),
-        "author_id": test_user_data["_id"],
-        "author_username": test_user_data["username"],
+        "post_id": str(mock_post_data["_id"]),
+        "author_id": mock_user_data["_id"],
+        "author_username": mock_user_data["username"],
         "content": "This is an existing comment.",
         "parent_id": None,
         "replies_count": 0,
@@ -133,6 +133,7 @@ def mock_comment_data(test_user_data, test_post_data):
 
 
 # --- Test Cases for create_post_comment ---
+@pytest.mark.asyncio
 class TestCreatePostComment:
     async def test_create_comment_success_no_parent(
         self,
@@ -198,6 +199,7 @@ class TestCreatePostComment:
 
 
 # --- Test Cases for get_comments ---
+@pytest.mark.asyncio
 class TestGetComments:
     async def test_get_comments_success(
         self,
@@ -251,6 +253,7 @@ class TestGetComments:
 
 
 # --- Test Cases for update_comment ---
+@pytest.mark.asyncio
 class TestUpdateComment:
     async def test_update_comment_success_owner_within_time(
         self,
@@ -348,6 +351,7 @@ class TestUpdateComment:
 
 
 # --- Test Cases for delete_comment ---
+@pytest.mark.asyncio
 class TestDeleteComment:
     async def test_delete_comment_success_owner(
         self,
