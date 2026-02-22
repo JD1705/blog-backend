@@ -49,7 +49,7 @@ async def comment_service_instance(
     mock_db.comments = mock_comments_collection
     mock_db.posts = mock_posts_collection
     mock_db.users = mock_users_collection
-    mocker.patch("services.comment_service.db.database", new_callable=mock_db)
+    mocker.patch("services.comment_service.db.database", new=mock_db)
     return CommentService()
 
 
@@ -144,9 +144,20 @@ class TestCreatePostComment:
         mock_user_data,
         mock_comment_create_schema,
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = mock_post_data
+        
+        response = await comment_service_instance.create_post_comment(mock_comment_create_schema, mock_user_data, "test-post")
+        
+        assert response.content == mock_comment_create_schema.content
+        assert response.parent_id is None
+        assert response.post_id == mock_post_data["_id"]
+        assert str(response.author_id) == mock_user_data["_id"]
 
+        mock_posts_collection.find_one.assert_called_once_with({"slug":"test-post"})
+        mock_posts_collection.update_one.assert_called_once_with({"slug":"test-post"}, {"$set": {"comments_count": mock_post_data["comments_count"] + 1}})
+        mock_comments_collection.insert_one.assert_called_once()
+        mock_comments_collection.find_one.assert_not_called()
+        
     async def test_create_comment_success_with_parent(
         self,
         comment_service_instance,
@@ -154,16 +165,43 @@ class TestCreatePostComment:
         mock_comments_collection,
         mock_post_data,
         mock_user_data,
-        mock_comment_create_schema,
     ):
-        # Implement test logic here
-        pass
+        comment_schema_with_parent_id = CommentCreate(content="This is a test comment", parent_id=str(ObjectId()))
+        mock_posts_collection.find_one.return_value = mock_post_data
+        mock_comments_collection.find_one.return_value = {
+        "_id": comment_schema_with_parent_id.parent_id,
+        "post_id": str(mock_post_data["_id"]),
+        "author_id": mock_user_data["_id"],
+        "author_username": mock_user_data["username"],
+        "content": "This is an existing comment.",
+        "parent_id": None,
+        "replies_count": 0,
+        "is_deleted": False,
+        "created_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+        "is_edited": False,
+        "edited_at": None,
+    }
+        response = await comment_service_instance.create_post_comment(comment_schema_with_parent_id, mock_user_data, "test-post")
+        
+        assert response.content == comment_schema_with_parent_id.content
+        assert str(response.parent_id) == comment_schema_with_parent_id.parent_id
+        assert response.post_id == mock_post_data["_id"]
+        assert str(response.author_id) == mock_user_data["_id"]
+
+        mock_posts_collection.find_one.assert_called_once_with({"slug":"test-post"})
+        mock_posts_collection.update_one.assert_called_once_with({"slug":"test-post"}, {"$set": {"comments_count": mock_post_data["comments_count"] + 1}})
+        mock_comments_collection.insert_one.assert_called_once()
+        mock_comments_collection.find_one.assert_called_once_with({"_id":ObjectId(comment_schema_with_parent_id.parent_id)})
 
     async def test_create_comment_fail_unauthorized(
         self, comment_service_instance, mock_comment_create_schema
     ):
-        # Implement test logic here
-        pass
+        with pytest.raises(HTTPException) as excinfo:
+            await comment_service_instance.create_post_comment(mock_comment_create_schema, user=None, slug="test-post")
+
+        assert excinfo.value.detail == "You dont have Permissions to comment"
+        assert excinfo.value.status_code == 401
 
     async def test_create_comment_fail_post_not_found(
         self,
@@ -172,8 +210,16 @@ class TestCreatePostComment:
         mock_user_data,
         mock_comment_create_schema,
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = None
+        
+        with pytest.raises(HTTPException) as excinfo:
+            await comment_service_instance.create_post_comment(mock_comment_create_schema, mock_user_data, "not-existing-post")
+
+        assert excinfo.value.detail == "Post Not found"
+        assert excinfo.value.status_code == 404
+
+        mock_posts_collection.find_one.assert_called_once()
+        mock_posts_collection.update_one.assert_not_called()
 
     async def test_create_comment_fail_post_not_published(
         self,
@@ -182,8 +228,27 @@ class TestCreatePostComment:
         mock_user_data,
         mock_comment_create_schema,
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = {
+            "_id": ObjectId(),
+            "title": "Test Post",
+            "slug": "test-post",
+            "content": "This is a test post.",
+            "author_id": mock_user_data["_id"],
+            "author_username": mock_user_data["username"],
+            "status": "draft",
+            "comments_count": 0,
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        }
+        
+        with pytest.raises(HTTPException) as excinfo:
+            await comment_service_instance.create_post_comment(mock_comment_create_schema, mock_user_data, "test-post")
+
+        assert excinfo.value.detail == "Post Not found"
+        assert excinfo.value.status_code == 404
+
+        mock_posts_collection.find_one.assert_called_once()
+        mock_posts_collection.update_one.assert_not_called()
 
     async def test_create_comment_fail_parent_not_found(
         self,
@@ -192,11 +257,22 @@ class TestCreatePostComment:
         mock_comments_collection,
         mock_post_data,
         mock_user_data,
-        mock_comment_create_schema,
     ):
-        # Implement test logic here
-        pass
+        comment_schema_with_parent_id = CommentCreate(content="This is a test comment", parent_id=str(ObjectId()))
+        mock_posts_collection.find_one.return_value = mock_post_data
+        mock_comments_collection.find_one.return_value = None
 
+        with pytest.raises(HTTPException) as excinfo:
+            await comment_service_instance.create_post_comment(comment_schema_with_parent_id, mock_user_data, "test-post")
+
+        assert excinfo.value.detail == "This comment doesnt exists"
+        assert excinfo.value.status_code == 400
+
+        mock_posts_collection.find_one.assert_called_once()
+        mock_posts_collection.update_one.assert_not_called()
+        mock_comments_collection.find_one.assert_called_once()
+        mock_comments_collection.insert_one.assert_not_called()
+        mock_comments_collection.update_one.assert_not_called()
 
 # --- Test Cases for get_comments ---
 @pytest.mark.asyncio
