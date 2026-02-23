@@ -284,15 +284,47 @@ class TestGetComments:
         mock_comments_collection,
         mock_post_data,
         mock_user_data,
+        mock_comment_data,
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = mock_post_data
+        mock_to_list_awaitable = AsyncMock(return_value=[mock_comment_data])
+        mock_cursor_object = MagicMock()
+        mock_cursor_object.sort.return_value = mock_cursor_object
+        mock_cursor_object.skip.return_value = mock_cursor_object
+        mock_cursor_object.limit.return_value = mock_cursor_object
+        mock_cursor_object.to_list = mock_to_list_awaitable
+        mock_comments_collection.find = MagicMock(return_value=mock_cursor_object)
+        mock_comments_collection.count_documents = AsyncMock(return_value=1)
+
+        comments, metadata = await comment_service_instance.get_comments("test-post", "newest", 10, 0, mock_user_data)
+
+        assert isinstance(comments, list)
+        assert len(comments) == 1
+        assert comments[0].post_id == mock_post_data["_id"]
+
+        assert metadata["total"] == 1
+        assert metadata["has_more"] is False
+
+        mock_comments_collection.count_documents.assert_called_once_with({
+            "post_id": mock_post_data["_id"]
+        })
+        mock_comments_collection.find.assert_called_once_with({
+            "post_id": mock_post_data["_id"]
+        })
+        mock_cursor_object.skip.assert_called_once_with(0)
+        mock_cursor_object.limit.assert_called_once_with(10)
+        mock_to_list_awaitable.assert_called_once()
 
     async def test_get_comments_fail_post_not_found(
         self, comment_service_instance, mock_posts_collection
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = None
+
+        with pytest.raises(HTTPException) as excinfo:
+            await comment_service_instance.get_comments("test-post", "newest", 10, 0, None)
+
+        assert excinfo.value.detail == "Post Not found"
+        assert excinfo.value.status_code == 404
 
     async def test_get_comments_with_pagination(
         self,
@@ -301,9 +333,44 @@ class TestGetComments:
         mock_comments_collection,
         mock_post_data,
         mock_user_data,
+        mock_comment_data
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = mock_post_data
+
+        # Create multiple mock comments for pagination
+        mock_comment_data_2 = {**mock_comment_data, "_id": ObjectId(), "content": "Another comment", "created_at": datetime.now(timezone.utc)}
+        mock_comment_data_3 = {**mock_comment_data, "_id": ObjectId(), "content": "Third comment", "created_at": datetime.now(timezone.utc)}
+        all_comments = [mock_comment_data, mock_comment_data_2, mock_comment_data_3]
+
+        mock_to_list_awaitable = AsyncMock(return_value=[mock_comment_data_2]) # Only expect one comment for this page
+        mock_cursor_object = MagicMock()
+        mock_cursor_object.sort.return_value = mock_cursor_object
+        mock_cursor_object.skip.return_value = mock_cursor_object
+        mock_cursor_object.limit.return_value = mock_cursor_object
+        mock_cursor_object.to_list = mock_to_list_awaitable
+        mock_comments_collection.find = MagicMock(return_value=mock_cursor_object)
+        mock_comments_collection.count_documents = AsyncMock(return_value=len(all_comments))
+
+        # Test with limit=1, skip=1 (second comment)
+        comments, metadata = await comment_service_instance.get_comments("test-post", "newest", 1, 1, mock_user_data)
+
+        assert isinstance(comments, list)
+        assert len(comments) == 1
+        assert comments[0].content == mock_comment_data_2["content"]
+
+        assert metadata["total"] == len(all_comments)
+        assert metadata["has_more"] is True # Since there's a third comment
+
+        mock_comments_collection.count_documents.assert_called_once_with({
+            "post_id": mock_post_data["_id"]
+        })
+        mock_comments_collection.find.assert_called_once_with({
+            "post_id": mock_post_data["_id"]
+        })
+        mock_cursor_object.skip.assert_called_once_with(1)
+        mock_cursor_object.limit.assert_called_once_with(1)
+        mock_to_list_awaitable.assert_called_once()
+
 
     async def test_get_comments_deleted_for_non_admin(
         self,
@@ -312,9 +379,44 @@ class TestGetComments:
         mock_comments_collection,
         mock_post_data,
         mock_user_data,
+        mock_comment_data
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = mock_post_data
+
+        deleted_comment_data = {**mock_comment_data, "is_deleted": True, "_id": ObjectId()}
+        active_comment_data = {**mock_comment_data, "is_deleted": False, "_id": ObjectId()}
+
+        mock_to_list_awaitable = AsyncMock(return_value=[active_comment_data]) # Only active comments should be returned
+        mock_cursor_object = MagicMock()
+        mock_cursor_object.sort.return_value = mock_cursor_object
+        mock_cursor_object.skip.return_value = mock_cursor_object
+        mock_cursor_object.limit.return_value = mock_cursor_object
+        mock_cursor_object.to_list = mock_to_list_awaitable
+        mock_comments_collection.find = MagicMock(return_value=mock_cursor_object)
+
+        # When querying for non-admin, count should exclude deleted comments
+        mock_comments_collection.count_documents = AsyncMock(return_value=1)
+
+        comments, metadata = await comment_service_instance.get_comments("test-post", "newest", 10, 0, mock_user_data)
+
+        assert isinstance(comments, list)
+        assert len(comments) == 1
+        assert comments[0].is_deleted is False
+        assert comments[0].content == active_comment_data["content"]
+
+        assert metadata["total"] == 1
+        assert metadata["has_more"] is False
+
+        mock_comments_collection.count_documents.assert_called_once_with({
+            "post_id": mock_post_data["_id"],
+        })
+        mock_comments_collection.find.assert_called_once_with({
+            "post_id": mock_post_data["_id"],
+        })
+        mock_cursor_object.skip.assert_called_once_with(0)
+        mock_cursor_object.limit.assert_called_once_with(10)
+        mock_to_list_awaitable.assert_called_once()
+
 
     async def test_get_comments_full_for_admin(
         self,
@@ -323,9 +425,45 @@ class TestGetComments:
         mock_comments_collection,
         mock_post_data,
         admin_user_data,
+        mock_comment_data
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = mock_post_data
+
+        deleted_comment_data = {**mock_comment_data, "is_deleted": True, "_id": ObjectId()}
+        active_comment_data = {**mock_comment_data, "is_deleted": False, "_id": ObjectId()}
+
+        mock_to_list_awaitable = AsyncMock(return_value=[active_comment_data, deleted_comment_data]) # Admin should see all comments
+        mock_cursor_object = MagicMock()
+        mock_cursor_object.sort.return_value = mock_cursor_object
+        mock_cursor_object.skip.return_value = mock_cursor_object
+        mock_cursor_object.limit.return_value = mock_cursor_object
+        mock_cursor_object.to_list = mock_to_list_awaitable
+        mock_comments_collection.find = MagicMock(return_value=mock_cursor_object)
+
+        # When querying for admin, count should include all comments (deleted or not)
+        mock_comments_collection.count_documents = AsyncMock(return_value=2)
+
+        comments, metadata = await comment_service_instance.get_comments("test-post", "newest", 10, 0, admin_user_data)
+
+        assert isinstance(comments, list)
+        assert len(comments) == 2
+        # Verify that both active and deleted comments are returned
+        assert any(c.is_deleted is False for c in comments)
+        assert any(c.is_deleted is True for c in comments)
+
+        assert metadata["total"] == 2
+        assert metadata["has_more"] is False
+
+        mock_comments_collection.count_documents.assert_called_once_with({
+            "post_id": mock_post_data["_id"]
+        })
+        mock_comments_collection.find.assert_called_once_with({
+            "post_id": mock_post_data["_id"]
+        })
+        mock_cursor_object.skip.assert_called_once_with(0)
+        mock_cursor_object.limit.assert_called_once_with(10)
+        mock_to_list_awaitable.assert_called_once()
+
 
 
 # --- Test Cases for update_comment ---
