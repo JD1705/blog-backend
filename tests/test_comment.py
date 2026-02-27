@@ -725,20 +725,24 @@ class TestDeleteComment:
         mock_comment_data,
         mock_user_data,
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = mock_post_data
+        mock_comments_collection.find_one.return_value = mock_comment_data
 
-    async def test_delete_comment_success_admin(
-        self,
-        comment_service_instance,
-        mock_posts_collection,
-        mock_comments_collection,
-        mock_post_data,
-        mock_comment_data,
-        admin_user_data,
-    ):
-        # Implement test logic here
-        pass
+        await comment_service_instance.delete_comment(
+            "test-post", str(mock_comment_data["_id"]), mock_user_data
+        )
+
+        mock_posts_collection.find_one.assert_called_once_with({"slug": "test-post"})
+        mock_comments_collection.find_one.assert_called_once_with(
+            {"_id": mock_comment_data["_id"]}
+        )
+        mock_comments_collection.update_one.assert_called_once()
+        call_args, _ = mock_comments_collection.update_one.call_args
+        assert call_args[0] == {"_id": mock_comment_data["_id"]}
+
+        update_set_payload = call_args[1]["$set"]
+        assert update_set_payload["is_deleted"] is True
+        assert "deleted_at" in update_set_payload
 
     async def test_delete_comment_fail_post_not_found(
         self,
@@ -747,14 +751,38 @@ class TestDeleteComment:
         mock_user_data,
         mock_comment_data,
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = None
+
+        with pytest.raises(HTTPException) as excinfo:
+            await comment_service_instance.delete_comment(
+                "not-existing-post",
+                str(mock_comment_data["_id"]),
+                mock_user_data,
+            )
+
+        assert excinfo.value.detail == "Post Not found"
+        assert excinfo.value.status_code == 404
+
+        mock_posts_collection.find_one.assert_called_once_with(
+            {"slug": "not-existing-post"}
+        )
 
     async def test_delete_comment_fail_unauthorized(
-        self, comment_service_instance, mock_comment_data
+        self, mock_posts_collection, comment_service_instance, mock_comment_data
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = mock_post_data
+
+        with pytest.raises(HTTPException) as excinfo:
+            await comment_service_instance.delete_comment(
+                "test-post",
+                str(mock_comment_data["_id"]),
+                None,
+            )
+
+        assert excinfo.value.status_code == 401
+        assert excinfo.value.detail == "You are Not Authenticated"
+
+        mock_posts_collection.find_one.assert_called_once()
 
     async def test_delete_comment_fail_comment_not_found(
         self,
@@ -765,8 +793,22 @@ class TestDeleteComment:
         mock_user_data,
         mock_comment_data,
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = mock_post_data
+        mock_comments_collection.find_one.return_value = None
+
+        with pytest.raises(HTTPException) as excinfo:
+            await comment_service_instance.delete_comment(
+                "test-post",
+                str(mock_comment_data["_id"]),
+                mock_user_data,
+            )
+
+        assert excinfo.value.status_code == 404
+        assert excinfo.value.detail == "Comment Not found"
+
+        mock_posts_collection.find_one.assert_called_once()
+        mock_comments_collection.find_one.assert_called_once()
+        mock_comments_collection.update_one.assert_not_called()
 
     async def test_delete_comment_fail_comment_already_deleted(
         self,
@@ -777,8 +819,27 @@ class TestDeleteComment:
         mock_comment_data,
         mock_user_data,
     ):
-        # Implement test logic here
-        pass
+        deleted_comment_data = {
+            **mock_comment_data,
+            "is_deleted": True,
+            "_id": ObjectId(),
+        }
+        mock_posts_collection.find_one.return_value = mock_post_data
+        mock_comments_collection.find_one.return_value = deleted_comment_data
+
+        with pytest.raises(HTTPException) as excinfo:
+            await comment_service_instance.delete_comment(
+                "test-post",
+                str(mock_comment_data["_id"]),
+                mock_user_data,
+            )
+
+        assert excinfo.value.status_code == 401
+        assert excinfo.value.detail == "This comment is deleted"
+
+        mock_posts_collection.find_one.assert_called_once()
+        mock_comments_collection.find_one.assert_called_once()
+        mock_comments_collection.update_one.assert_not_called()
 
     async def test_delete_comment_fail_not_author_and_not_admin(
         self,
@@ -789,5 +850,29 @@ class TestDeleteComment:
         mock_comment_data,
         mock_user_data,
     ):
-        # Implement test logic here
-        pass
+        mock_posts_collection.find_one.return_value = mock_post_data
+        mock_comments_collection.find_one.return_value = mock_comment_data
+
+        not_author_data = {
+            "_id": str(ObjectId()),
+            "username": "testuser",
+            "email": "test@example.com",
+            "role": "user",
+            "hashed_password": "hashedpassword",
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
+        }
+
+        with pytest.raises(HTTPException) as excinfo:
+            await comment_service_instance.delete_comment(
+                "test-post",
+                str(mock_comment_data["_id"]),
+                not_author_data,
+            )
+
+        assert excinfo.value.status_code == 401
+        assert excinfo.value.detail.lower() == "you dont have permission to do this"
+
+        mock_posts_collection.find_one.assert_called_once()
+        mock_comments_collection.find_one.assert_called_once()
+        mock_comments_collection.update_one.assert_not_called()
